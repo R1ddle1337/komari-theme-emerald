@@ -126,20 +126,38 @@ onUnmounted(() => {
 }
 
 @keyframes orb-float-1 {
-  0% { transform: translate(0, 0) scale(1); }
-  50% { transform: translate(8%, 12%) scale(1.1); }
-  100% { transform: translate(-5%, 8%) scale(0.95); }
+  0% {
+    transform: translate(0, 0) scale(1);
+  }
+  50% {
+    transform: translate(8%, 12%) scale(1.1);
+  }
+  100% {
+    transform: translate(-5%, 8%) scale(0.95);
+  }
 }
 
 @keyframes orb-float-2 {
-  0% { transform: translate(0, 0) scale(1); }
-  50% { transform: translate(-10%, -8%) scale(1.08); }
-  100% { transform: translate(5%, -12%) scale(0.98); }
+  0% {
+    transform: translate(0, 0) scale(1);
+  }
+  50% {
+    transform: translate(-10%, -8%) scale(1.08);
+  }
+  100% {
+    transform: translate(5%, -12%) scale(0.98);
+  }
 }
 
 @keyframes orb-float-3 {
-  0% { transform: translate(0, 0) scale(1); }
-  50% { transform: translate(12%, -6%) scale(1.05); }
-  100% { transform: translate(-8%, 10%) scale(1.02); }
+  0% {
+    transform: translate(0, 0) scale(1);
+  }
+  50% {
+    transform: translate(12%, -6%) scale(1.05);
+  }
+  100% {
+    transform: translate(-8%, 10%) scale(1.02);
+  }
 }
 </style>

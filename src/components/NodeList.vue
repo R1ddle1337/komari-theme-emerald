@@ -231,7 +231,7 @@ function getCustomTags(node: NodeData): Array<string> {
         <div
           v-for="(node, index) in sortedNodes"
           :key="getRowTransitionKey(node)"
-class="flex flex-col relative h-16 justify-center px-2 cursor-pointer bg-background/30 rounded-lg backdrop-blur-xl shadow-[0_0_0_2px] shadow-transparent hover:shadow-slate-500/10 hover:bg-background/60 transition-all"
+          class="flex flex-col relative h-16 justify-center px-2 cursor-pointer bg-background/30 rounded-lg backdrop-blur-xl shadow-[0_0_0_2px] shadow-transparent hover:shadow-slate-500/10 hover:bg-background/60 transition-all"
           :class="[!node.online && '!shadow-red-600/10']"
           :style="getRowTransitionStyle(index)"
           @click="handleClick(node)"

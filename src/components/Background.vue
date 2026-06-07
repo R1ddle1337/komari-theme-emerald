@@ -2,6 +2,7 @@
 import { computed, onUnmounted, ref, watch } from 'vue'
 import { useAppStore } from '@/stores/app'
 import ShaderBackground from '@/components/ShaderBackground.vue'
+import ShaderBackgroundLiquid from '@/components/ShaderBackgroundLiquid.vue'
 
 const appStore = useAppStore()
 
@@ -126,7 +127,8 @@ onUnmounted(() => {
         v-if="showDefaultBackground"
         class="absolute inset-0 overflow-hidden"
       >
-        <ShaderBackground />
+        <ShaderBackgroundLiquid v-if="appStore.shaderType === 'liquid'" />
+        <ShaderBackground v-else-if="appStore.shaderType === 'bubbles'" />
       </div>
     </Transition>
     <Transition name="fade">

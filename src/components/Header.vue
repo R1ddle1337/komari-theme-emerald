@@ -6,6 +6,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { useAppStore } from '@/stores/app'
+import type { ShaderType } from '@/stores/app'
 
 const router = useRouter()
 const appStore = useAppStore()
@@ -13,6 +14,20 @@ const appStore = useAppStore()
 const isScrolled = inject<ReturnType<typeof ref<boolean>>>('isScrolled', ref(false))
 
 const siteFavicon = ref('/favicon.ico')
+
+// Shader选择器弹出状态
+const showShaderMenu = ref(false)
+
+const shaderOptions: { label: string, value: ShaderType, icon: string }[] = [
+  { label: '气泡', value: 'bubbles', icon: 'icon-park-outline:bubble' },
+  { label: '流体', value: 'liquid', icon: 'icon-park-outline:water-level' },
+  { label: '无', value: 'none', icon: 'icon-park-outline:close-one' },
+]
+
+function selectShader(value: ShaderType) {
+  appStore.shaderType = value
+  showShaderMenu.value = false
+}
 
 const actionButtons = computed(() => {
   const buttons = [
@@ -64,6 +79,42 @@ const sitename = computed(() => appStore.publicSettings?.sitename || 'Komari Mon
       </div>
       <TooltipProvider :delay-duration="200">
         <div class="flex items-center gap-2">
+          <!-- Shader背景选择器 -->
+          <div class="relative">
+            <Tooltip>
+              <TooltipTrigger as-child>
+                <Button variant="ghost" size="icon-sm" @click="showShaderMenu = !showShaderMenu">
+                  <Icon icon="icon-park-outline:pic" :width="18" :height="18" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>背景效果</TooltipContent>
+            </Tooltip>
+            <Transition
+              enter-active-class="transition-all duration-150 ease-out"
+              enter-from-class="opacity-0 scale-95 -translate-y-1"
+              enter-to-class="opacity-100 scale-100 translate-y-0"
+              leave-active-class="transition-all duration-100 ease-in"
+              leave-from-class="opacity-100 scale-100 translate-y-0"
+              leave-to-class="opacity-0 scale-95 -translate-y-1"
+            >
+              <div
+                v-if="showShaderMenu"
+                class="absolute right-0 top-full mt-2 w-32 rounded-lg border border-border bg-popover/90 backdrop-blur-xl p-1 shadow-lg z-50"
+              >
+                <button
+                  v-for="opt in shaderOptions"
+                  :key="opt.value"
+                  class="flex items-center gap-2 w-full rounded-md px-2.5 py-1.5 text-sm transition-colors hover:bg-accent/50"
+                  :class="appStore.shaderType === opt.value ? 'text-foreground font-medium bg-accent/30' : 'text-muted-foreground'"
+                  @click="selectShader(opt.value)"
+                >
+                  <Icon :icon="opt.icon" :width="16" :height="16" />
+                  <span>{{ opt.label }}</span>
+                </button>
+              </div>
+            </Transition>
+          </div>
+
           <Tooltip v-for="button in actionButtons" :key="button.action">
             <TooltipTrigger as-child>
               <Button variant="ghost" size="icon-sm" @click="handleButtonClick(button.action)">
@@ -76,4 +127,8 @@ const sitename = computed(() => appStore.publicSettings?.sitename || 'Komari Mon
       </TooltipProvider>
     </div>
   </div>
+  <!-- Click outside to close shader menu -->
+  <Teleport to="body">
+    <div v-if="showShaderMenu" class="fixed inset-0 z-9" @click="showShaderMenu = false" />
+  </Teleport>
 </template>

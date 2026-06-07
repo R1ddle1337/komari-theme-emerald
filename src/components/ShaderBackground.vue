@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { useDocumentVisibility, useElementVisibility } from '@vueuse/core'
+import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { useAppStore } from '@/stores/app'
 
 const appStore = useAppStore()
@@ -86,7 +86,8 @@ void main() {
 
 function createShader(glCtx: WebGLRenderingContext, type: number, source: string): WebGLShader | null {
   const shader = glCtx.createShader(type)
-  if (!shader) return null
+  if (!shader)
+    return null
   glCtx.shaderSource(shader, source)
   glCtx.compileShader(shader)
   if (!glCtx.getShaderParameter(shader, glCtx.COMPILE_STATUS)) {
@@ -99,7 +100,8 @@ function createShader(glCtx: WebGLRenderingContext, type: number, source: string
 
 function initWebGL() {
   const canvas = canvasRef.value
-  if (!canvas) return false
+  if (!canvas)
+    return false
 
   gl = canvas.getContext('webgl', {
     alpha: false,
@@ -107,15 +109,18 @@ function initWebGL() {
     preserveDrawingBuffer: false,
     powerPreference: isMobile ? 'low-power' : 'default',
   })
-  if (!gl) return false
+  if (!gl)
+    return false
 
   const bubbleCount = isMobile ? 20 : 40
   const vs = createShader(gl, gl.VERTEX_SHADER, VERTEX_SHADER)
   const fs = createShader(gl, gl.FRAGMENT_SHADER, getFragmentShader(bubbleCount, isMobile))
-  if (!vs || !fs) return false
+  if (!vs || !fs)
+    return false
 
   program = gl.createProgram()
-  if (!program) return false
+  if (!program)
+    return false
 
   gl.attachShader(program, vs)
   gl.attachShader(program, fs)
@@ -148,7 +153,8 @@ function initWebGL() {
 
 function resize() {
   const canvas = canvasRef.value
-  if (!canvas) return
+  if (!canvas)
+    return
 
   // Mobile: 0.35x resolution; Desktop: 0.75x (original)
   const dpr = isMobile ? 0.35 : 0.75
@@ -163,15 +169,18 @@ function resize() {
 }
 
 function render(now: number) {
-  if (!gl || !program) return
+  if (!gl || !program)
+    return
 
   animationId = requestAnimationFrame(render)
 
   // Pause when tab hidden or element off-screen
-  if (documentVisibility.value !== 'visible' || !elementVisible.value) return
+  if (documentVisibility.value !== 'visible' || !elementVisible.value)
+    return
 
   // Mobile: 30fps throttle; Desktop: no throttle
-  if (FRAME_INTERVAL && now - lastFrameTime < FRAME_INTERVAL) return
+  if (FRAME_INTERVAL && now - lastFrameTime < FRAME_INTERVAL)
+    return
   lastFrameTime = now
 
   resize()

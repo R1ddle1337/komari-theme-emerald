@@ -11,9 +11,9 @@ import { Input } from '@/components/ui/input'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useAppStore } from '@/stores/app'
 import { useNodesStore } from '@/stores/nodes'
+import { getCountryCodeFromRegion } from '@/utils/geoHelper'
 import { isNodeInGroup, parseNodeGroups } from '@/utils/groupHelper'
 import { getRegionDisplayName, isRegionMatch } from '@/utils/regionHelper'
-import { getCountryCodeFromRegion } from '@/utils/geoHelper'
 
 defineOptions({ name: 'HomeView' })
 
@@ -62,7 +62,8 @@ const regionGroups = computed(() => {
   const regionMap = new Map<string, { emoji: string, name: string, count: number }>()
   for (const node of nodesStore.nodes) {
     const code = getCountryCodeFromRegion(node.region)
-    if (!code) continue
+    if (!code)
+      continue
     const emoji = node.region.trim()
     if (!regionMap.has(code)) {
       regionMap.set(code, { emoji, name: getRegionDisplayName(emoji), count: 0 })
@@ -84,7 +85,8 @@ watch(
   () => [nodesStore.groups, regionGroups.value] as const,
   ([gs]) => {
     const cur = appStore.nodeSelectedGroup
-    if (cur === 'all') return
+    if (cur === 'all')
+      return
     if (cur.startsWith('region:')) {
       // region tab 失效时回退
       if (!regionGroups.value.some(r => r.name === cur)) {

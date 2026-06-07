@@ -5,6 +5,7 @@ import { defineStore } from 'pinia'
 import { computed, ref, watch } from 'vue'
 
 export type ThemeMode = 'auto' | 'light' | 'dark'
+export type ShaderType = 'bubbles' | 'liquid' | 'none'
 type Lang = 'zh-CN' | 'en-US'
 type NodeViewMode = 'card' | 'list'
 type RpcTransportMode = 'websocket' | 'http'
@@ -30,6 +31,7 @@ const useAppStore = defineStore('app', () => {
   const lang = ref<Lang>('zh-CN')
   const publicSettings = ref<PublicSettings>()
   const nodeSelectedGroup = useStorageAsync<string>('nodeSelectedGroup', 'all', localStorage)
+  const shaderType = useStorageAsync<ShaderType>('shaderType', 'bubbles', localStorage)
   const isLoggedIn = ref<boolean>(false)
   const connectionError = ref<boolean>(false)
 
@@ -164,9 +166,12 @@ const useAppStore = defineStore('app', () => {
       return true
     }
     const val = settings.enableGlassEffect
-    if (typeof val === 'boolean') return val
-    if (val === 'true' || val === '1') return true
-    if (val === 'false' || val === '0') return false
+    if (typeof val === 'boolean')
+      return val
+    if (val === 'true' || val === '1')
+      return true
+    if (val === 'false' || val === '0')
+      return false
     return true
   })
 
@@ -361,6 +366,7 @@ const useAppStore = defineStore('app', () => {
     currentBackgroundUrl,
     backgroundBlur,
     backgroundOverlay,
+    shaderType,
     isLoggedIn,
     publicSettings,
     connectionError,

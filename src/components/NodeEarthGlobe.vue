@@ -479,7 +479,8 @@ onBeforeUnmount(() => {
 
 // 切换主题时更新颜色，不再整体重建（重建会导致地球丢失）
 watch(() => appStore.isDark, () => {
-  if (!globe) return
+  if (!globe)
+    return
   const colors = themeColors.value
   globe.update({
     dark: colors.dark,

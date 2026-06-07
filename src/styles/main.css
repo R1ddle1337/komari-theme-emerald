@@ -170,7 +170,9 @@ html.no-glass body {
 /* Dynamic hover blur transition on glass cards */
 @layer utilities {
   .glass-hover-blur {
-    transition: backdrop-filter 0.3s ease, -webkit-backdrop-filter 0.3s ease;
+    transition:
+      backdrop-filter 0.3s ease,
+      -webkit-backdrop-filter 0.3s ease;
   }
 
   .glass-hover-blur:hover {
