@@ -50,7 +50,7 @@ onUnmounted(() => {
       <LoadingCover v-if="appStore.loading" />
     </Transition>
     <Header />
-    <main v-if="!appStore.loading" class="min-h-screen overflow-hidden">
+    <main v-if="!appStore.loading" class="relative z-10 min-h-screen overflow-hidden">
       <div class="max-w-[1280px] mx-auto">
         <RouterView v-slot="{ Component }">
           <Transition
@@ -71,7 +71,7 @@ onUnmounted(() => {
   </Provider>
 </template>
 
-<style scoped>
+<style>
 .glass-orbs {
   position: fixed;
   inset: 0;
@@ -113,15 +113,15 @@ onUnmounted(() => {
   animation: orb-float-3 25s ease-in-out infinite alternate;
 }
 
-:root.dark .glass-orb-1 {
+.dark .glass-orb-1 {
   background: oklch(0.25 0.12 240 / 0.4);
 }
 
-:root.dark .glass-orb-2 {
+.dark .glass-orb-2 {
   background: oklch(0.22 0.1 170 / 0.35);
 }
 
-:root.dark .glass-orb-3 {
+.dark .glass-orb-3 {
   background: oklch(0.2 0.09 310 / 0.3);
 }
 
