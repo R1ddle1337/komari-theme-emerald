@@ -94,6 +94,13 @@ function getCappedDpr(): number {
   return Math.min(Math.max(raw, 1.5), 2)
 }
 
+// 移动端降低 mapSamples 提升性能
+function getMapSamples(): number {
+  if (typeof window === 'undefined')
+    return 14000
+  return window.innerWidth < 768 ? 8000 : 14000
+}
+
 interface RegionCluster {
   code: string
   coord: [number, number]
@@ -351,7 +358,7 @@ function buildInitialOptions(): COBEOptions {
     theta,
     dark: colors.dark,
     diffuse: 1.6,
-    mapSamples: 14000,
+    mapSamples: getMapSamples(),
     mapBrightness: colors.mapBrightness,
     baseColor: colors.baseColor,
     markerColor: colors.markerColor,

@@ -91,7 +91,7 @@ onUnmounted(() => {
   height: 50vh;
   top: -10%;
   left: -5%;
-  background: oklch(0.75 0.12 240 / 0.3);
+  background: oklch(0.6 0.18 240 / 0.4);
   animation: orb-float-1 18s ease-in-out infinite alternate;
 }
 
@@ -100,7 +100,7 @@ onUnmounted(() => {
   height: 45vh;
   bottom: -5%;
   right: -5%;
-  background: oklch(0.78 0.1 170 / 0.25);
+  background: oklch(0.65 0.15 170 / 0.35);
   animation: orb-float-2 22s ease-in-out infinite alternate;
 }
 
@@ -109,7 +109,7 @@ onUnmounted(() => {
   height: 35vh;
   top: 30%;
   left: 40%;
-  background: oklch(0.8 0.09 310 / 0.2);
+  background: oklch(0.68 0.14 310 / 0.3);
   animation: orb-float-3 25s ease-in-out infinite alternate;
 }
 
