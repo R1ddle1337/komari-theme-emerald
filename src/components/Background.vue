@@ -130,6 +130,8 @@ onUnmounted(() => {
       >
         <ShaderBackgroundLiquid v-if="appStore.shaderType === 'liquid'" />
         <ShaderBackground v-else-if="appStore.shaderType === 'bubbles'" />
+        <!-- Readability overlay: softens shader intensity so card text stays legible -->
+        <div class="absolute inset-0 pointer-events-none bg-white/25 dark:bg-black/20" />
       </div>
     </Transition>
     <Transition name="fade">
