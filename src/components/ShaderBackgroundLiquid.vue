@@ -12,8 +12,8 @@ let startTime = 0
 let lastFrameTime = 0
 
 const isMobile = window.innerWidth < 768
-// Mobile: 24fps cap; Desktop: 30fps cap (heavy raymarching shader)
-const FRAME_INTERVAL = isMobile ? 1000 / 24 : 1000 / 30
+// Mobile: 24fps cap; Desktop: uncapped (60fps)
+const FRAME_INTERVAL = isMobile ? 1000 / 24 : 0
 
 // Visibility-based pause
 const documentVisibility = useDocumentVisibility()
@@ -295,13 +295,13 @@ function initWebGL() {
     alpha: false,
     antialias: false,
     preserveDrawingBuffer: false,
-    powerPreference: isMobile ? 'low-power' : 'default',
+    powerPreference: isMobile ? 'low-power' : 'high-performance',
   })
   if (!gl)
     return false
 
   // Mobile: 50 iterations; Desktop: 100 iterations
-  const maxIter = isMobile ? 50 : 100
+  const maxIter = isMobile ? 50 : 200
   const vs = createShader(gl, gl.VERTEX_SHADER, VERTEX_SHADER)
   const fs = createShader(gl, gl.FRAGMENT_SHADER, getFragmentShader(maxIter))
   if (!vs || !fs)
@@ -345,8 +345,8 @@ function resize() {
   if (!canvas)
     return
 
-  // Mobile: 0.25x resolution; Desktop: 0.4x (heavy raymarching shader)
-  const dpr = isMobile ? 0.25 : 0.4
+  // Mobile: 0.25x resolution; Desktop: 1x (full resolution)
+  const dpr = isMobile ? 0.25 : 1.0
   const width = Math.floor(canvas.clientWidth * dpr)
   const height = Math.floor(canvas.clientHeight * dpr)
 

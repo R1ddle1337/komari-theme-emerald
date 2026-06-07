@@ -156,8 +156,8 @@ function resize() {
   if (!canvas)
     return
 
-  // Mobile: 0.35x resolution; Desktop: 0.75x (original)
-  const dpr = isMobile ? 0.35 : 0.75
+  // Mobile: 0.35x resolution; Desktop: 1x (full resolution)
+  const dpr = isMobile ? 0.35 : 1.0
   const width = Math.floor(canvas.clientWidth * dpr)
   const height = Math.floor(canvas.clientHeight * dpr)
 
