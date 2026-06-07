@@ -122,9 +122,10 @@ onUnmounted(() => {
 
 <template>
   <div class="background-container" :style="backgroundContainerStyle">
-    <Transition name="fade">
+    <Transition name="fade" mode="out-in">
       <div
         v-if="showDefaultBackground"
+        :key="appStore.shaderType"
         class="absolute inset-0 overflow-hidden"
       >
         <ShaderBackgroundLiquid v-if="appStore.shaderType === 'liquid'" />
