@@ -477,9 +477,22 @@ onBeforeUnmount(() => {
   globe = null
 })
 
-// 切换主题时重建 globe
-watch(() => appStore.isDark, async () => {
-  await rebuildGlobe()
+// 切换主题时更新颜色，不再整体重建（重建会导致地球丢失）
+watch(() => appStore.isDark, () => {
+  if (!globe) return
+  const colors = themeColors.value
+  globe.update({
+    dark: colors.dark,
+    mapBrightness: colors.mapBrightness,
+    baseColor: colors.baseColor,
+    markerColor: colors.markerColor,
+    glowColor: colors.glowColor,
+    arcColor: colors.arcColor,
+  })
+  // 静止模式下需手动触发重绘
+  if (!shouldAutoRotate.value) {
+    triggerStaticRedrawWindow()
+  }
 })
 
 watch(
