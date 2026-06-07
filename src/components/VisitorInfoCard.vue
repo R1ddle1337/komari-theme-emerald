@@ -135,6 +135,22 @@ function detectClient(): VisitorClientData {
   }
 }
 
+async function fetchText(url: string, timeoutMs: number): Promise<string> {
+  const controller = new AbortController()
+  const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs)
+
+  try {
+    const response = await fetch(url, { signal: controller.signal })
+    if (!response.ok) {
+      throw new Error(`Request failed: ${response.status}`)
+    }
+    return await response.text()
+  }
+  finally {
+    window.clearTimeout(timeoutId)
+  }
+}
+
 async function fetchJson<T>(url: string, timeoutMs: number): Promise<T> {
   const controller = new AbortController()
   const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs)
@@ -151,9 +167,46 @@ async function fetchJson<T>(url: string, timeoutMs: number): Promise<T> {
   }
 }
 
+function parseCfTrace(text: string): Record<string, string> {
+  const result: Record<string, string> = {}
+  for (const line of text.split('\n')) {
+    const idx = line.indexOf('=')
+    if (idx > 0) {
+      result[line.slice(0, idx)] = line.slice(idx + 1)
+    }
+  }
+  return result
+}
+
 async function fetchVisitorGeo(): Promise<VisitorGeoData | null> {
-  const loaders = [
+  // Step 1: Get real outbound IP via Cloudflare (always respects proxy)
+  let cfIp = ''
+  let cfCountryCode = ''
+  try {
+    const traceText = await fetchText('https://1.1.1.1/cdn-cgi/trace', 3000)
+    const trace = parseCfTrace(traceText)
+    cfIp = trace.ip || ''
+    cfCountryCode = (trace.loc || '').toUpperCase()
+  }
+  catch {
+    // fallback: try cloudflare on their domain
+    try {
+      const traceText = await fetchText('https://www.cloudflare.com/cdn-cgi/trace', 3000)
+      const trace = parseCfTrace(traceText)
+      cfIp = trace.ip || ''
+      cfCountryCode = (trace.loc || '').toUpperCase()
+    }
+    catch {
+      // both failed, continue to legacy loaders
+    }
+  }
+
+  // Step 2: Get geo details for the IP
+  const geoLoaders = [
     async (): Promise<VisitorGeoData> => {
+      const url = cfIp
+        ? `https://ip-api.com/json/${cfIp}?lang=zh-CN&fields=status,country,countryCode,regionName,city,query,isp`
+        : 'https://ip-api.com/json/?lang=zh-CN&fields=status,country,countryCode,regionName,city,query,isp'
       const data = await fetchJson<{
         status: string
         country?: string
@@ -162,20 +215,23 @@ async function fetchVisitorGeo(): Promise<VisitorGeoData | null> {
         city?: string
         query?: string
         isp?: string
-      }>('https://ip-api.com/json/?lang=zh-CN&fields=status,country,countryCode,regionName,city,query,isp', 4000)
+      }>(url, 4000)
 
       if (data.status !== 'success' || !data.query) {
         throw new Error('ip-api unavailable')
       }
 
       return {
-        ip: data.query,
+        ip: cfIp || data.query,
         isp: data.isp || '未知运营商',
         location: [data.country, data.city || data.regionName].filter(Boolean).join(' · ') || '未知位置',
-        countryCode: data.countryCode || '',
+        countryCode: data.countryCode || cfCountryCode || '',
       }
     },
     async (): Promise<VisitorGeoData> => {
+      const url = cfIp
+        ? `https://ipapi.co/${cfIp}/json/`
+        : 'https://ipapi.co/json/'
       const data = await fetchJson<{
         error?: boolean
         reason?: string
@@ -185,46 +241,34 @@ async function fetchVisitorGeo(): Promise<VisitorGeoData | null> {
         country_code?: string
         region?: string
         city?: string
-      }>('https://ipapi.co/json/', 4000)
+      }>(url, 4000)
 
       if (data.error || !data.ip) {
         throw new Error(data.reason || 'ipapi unavailable')
       }
 
       return {
-        ip: data.ip,
+        ip: cfIp || data.ip,
         isp: data.org || '未知运营商',
         location: [data.country_name, data.city || data.region].filter(Boolean).join(' · ') || '未知位置',
-        countryCode: data.country_code || '',
+        countryCode: data.country_code || cfCountryCode || '',
       }
     },
     async (): Promise<VisitorGeoData> => {
-      const data = await fetchJson<{
-        code: number
-        data?: {
-          ip?: string
-          isp?: string
-          country?: string
-          province?: string
-          city?: string
-          countryCode?: string
+      // If we have CF IP but geo APIs all failed, return minimal info
+      if (cfIp) {
+        return {
+          ip: cfIp,
+          isp: '未知运营商',
+          location: cfCountryCode || '未知位置',
+          countryCode: cfCountryCode,
         }
-      }>('https://api.vore.top/api/IPdata', 5000)
-
-      if (data.code !== 0 || !data.data?.ip) {
-        throw new Error('vore unavailable')
       }
-
-      return {
-        ip: data.data.ip,
-        isp: data.data.isp || '未知运营商',
-        location: [data.data.country, data.data.city || data.data.province].filter(Boolean).join(' · ') || '未知位置',
-        countryCode: data.data.countryCode || '',
-      }
+      throw new Error('no IP available')
     },
   ]
 
-  for (const load of loaders) {
+  for (const load of geoLoaders) {
     try {
       return await load()
     }
