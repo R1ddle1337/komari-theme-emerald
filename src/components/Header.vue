@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Icon } from '@iconify/vue'
-import { computed, inject, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
@@ -17,6 +17,27 @@ const siteFavicon = ref('/favicon.ico')
 
 // Shader选择器弹出状态
 const showShaderMenu = ref(false)
+const triggerRef = ref<HTMLElement>()
+const menuRef = ref<HTMLElement>()
+
+// 菜单定位
+const menuPosition = ref({ top: '0px', right: '0px' })
+
+function updateMenuPosition() {
+  if (!triggerRef.value) return
+  const rect = triggerRef.value.getBoundingClientRect()
+  menuPosition.value = {
+    top: `${rect.bottom + 8}px`,
+    right: `${window.innerWidth - rect.right}px`,
+  }
+}
+
+function toggleMenu() {
+  showShaderMenu.value = !showShaderMenu.value
+  if (showShaderMenu.value) {
+    nextTick(updateMenuPosition)
+  }
+}
 
 const shaderOptions: { label: string, value: ShaderType, icon: string }[] = [
   { label: '气泡', value: 'bubbles', icon: 'icon-park-outline:bubble' },
@@ -32,8 +53,9 @@ function selectShader(value: ShaderType) {
 function handleClickOutside(e: MouseEvent) {
   if (!showShaderMenu.value) return
   const target = e.target as HTMLElement
-  // 如果点击的是菜单内部元素或者触发按钮，不关闭
+  // 如果点击的是菜单本体或触发按钮，不关闭
   if (target.closest('.shader-menu-container')) return
+  if (target.closest('.shader-menu-dropdown')) return
   showShaderMenu.value = false
 }
 
@@ -96,40 +118,15 @@ const sitename = computed(() => appStore.publicSettings?.sitename || 'Komari Mon
       <TooltipProvider :delay-duration="200">
         <div class="flex items-center gap-2">
           <!-- Shader背景选择器 -->
-          <div class="relative shader-menu-container">
+          <div ref="triggerRef" class="relative shader-menu-container">
             <Tooltip>
               <TooltipTrigger as-child>
-                <Button variant="ghost" size="icon-sm" @click.stop="showShaderMenu = !showShaderMenu">
+                <Button variant="ghost" size="icon-sm" @click.stop="toggleMenu">
                   <Icon icon="icon-park-outline:pic" :width="18" :height="18" />
                 </Button>
               </TooltipTrigger>
               <TooltipContent>背景效果</TooltipContent>
             </Tooltip>
-            <Transition
-              enter-active-class="transition-all duration-150 ease-out"
-              enter-from-class="opacity-0 scale-95 -translate-y-1"
-              enter-to-class="opacity-100 scale-100 translate-y-0"
-              leave-active-class="transition-all duration-100 ease-in"
-              leave-from-class="opacity-100 scale-100 translate-y-0"
-              leave-to-class="opacity-0 scale-95 -translate-y-1"
-            >
-              <div
-                v-if="showShaderMenu"
-                class="absolute right-0 top-full mt-2 w-32 rounded-lg border border-border bg-popover/90 backdrop-blur-xl p-1 shadow-lg z-[100]"
-              >
-                <button
-                  v-for="opt in shaderOptions"
-                  :key="opt.value"
-                  type="button"
-                  class="flex items-center gap-2 w-full rounded-md px-2.5 py-1.5 text-sm transition-colors hover:bg-accent/50 cursor-pointer"
-                  :class="appStore.shaderType === opt.value ? 'text-foreground font-medium bg-accent/30' : 'text-muted-foreground'"
-                  @click.stop="selectShader(opt.value)"
-                >
-                  <Icon :icon="opt.icon" :width="16" :height="16" />
-                  <span>{{ opt.label }}</span>
-                </button>
-              </div>
-            </Transition>
           </div>
 
           <Tooltip v-for="button in actionButtons" :key="button.action">
@@ -144,4 +141,35 @@ const sitename = computed(() => appStore.publicSettings?.sitename || 'Komari Mon
       </TooltipProvider>
     </div>
   </div>
+
+  <!-- 菜单 Teleport 到 body，脱离 Header stacking context -->
+  <Teleport to="body">
+    <Transition
+      enter-active-class="transition-all duration-150 ease-out"
+      enter-from-class="opacity-0 scale-95 -translate-y-1"
+      enter-to-class="opacity-100 scale-100 translate-y-0"
+      leave-active-class="transition-all duration-100 ease-in"
+      leave-from-class="opacity-100 scale-100 translate-y-0"
+      leave-to-class="opacity-0 scale-95 -translate-y-1"
+    >
+      <div
+        v-if="showShaderMenu"
+        ref="menuRef"
+        class="shader-menu-dropdown fixed w-32 rounded-lg border border-border bg-popover/90 backdrop-blur-xl p-1 shadow-lg z-[9999]"
+        :style="{ top: menuPosition.top, right: menuPosition.right }"
+      >
+        <button
+          v-for="opt in shaderOptions"
+          :key="opt.value"
+          type="button"
+          class="flex items-center gap-2 w-full rounded-md px-2.5 py-1.5 text-sm transition-colors hover:bg-accent/50 cursor-pointer"
+          :class="appStore.shaderType === opt.value ? 'text-foreground font-medium bg-accent/30' : 'text-muted-foreground'"
+          @click.stop="selectShader(opt.value)"
+        >
+          <Icon :icon="opt.icon" :width="16" :height="16" />
+          <span>{{ opt.label }}</span>
+        </button>
+      </div>
+    </Transition>
+  </Teleport>
 </template>
