@@ -114,15 +114,15 @@ onUnmounted(() => {
 }
 
 .dark .glass-orb-1 {
-  background: oklch(0.25 0.12 240 / 0.4);
+  background: oklch(0.35 0.1 240 / 0.25);
 }
 
 .dark .glass-orb-2 {
-  background: oklch(0.22 0.1 170 / 0.35);
+  background: oklch(0.3 0.08 200 / 0.2);
 }
 
 .dark .glass-orb-3 {
-  background: oklch(0.2 0.09 310 / 0.3);
+  background: oklch(0.28 0.07 260 / 0.18);
 }
 
 @keyframes orb-float-1 {

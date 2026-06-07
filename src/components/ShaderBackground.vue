@@ -64,15 +64,18 @@ void main() {
 
     ${earlySkip}
 
+    // Light mode: warm orange to cool blue
     vec3 col = mix(vec3(0.94, 0.3, 0.0), vec3(0.1, 0.4, 0.8), 0.5 + 0.5 * sin(float(i) * 1.2 + 1.9));
-    vec3 darkCol = mix(vec3(0.3, 0.5, 0.9), vec3(0.2, 0.8, 0.6), 0.5 + 0.5 * sin(float(i) * 1.2 + 1.9));
+    // Dark mode: deep blue to teal, much lower saturation to stay subtle
+    vec3 darkCol = mix(vec3(0.12, 0.2, 0.45), vec3(0.08, 0.3, 0.35), 0.5 + 0.5 * sin(float(i) * 1.2 + 1.9));
     col = mix(col, darkCol, isDark);
 
     float f = dis / rad;
     f = sqrt(clamp(1.0 - f * f, 0.0, 1.0));
 
     vec3 contribution = col.zyx * (1.0 - smoothstep(rad * 0.95, rad, dis)) * f;
-    color = mix(color - contribution * 0.8, color + contribution * 0.4, isDark);
+    // Light: subtract for depth; Dark: add gently (0.2 instead of 0.4)
+    color = mix(color - contribution * 0.8, color + contribution * 0.2, isDark);
   }
 
   color *= sqrt(1.5 - 0.5 * length(uv));

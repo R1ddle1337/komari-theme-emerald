@@ -324,11 +324,11 @@ const themeColors = computed(() => {
   if (appStore.isDark) {
     return {
       dark: 1,
-      mapBrightness: 5,
-      baseColor: [0.15, 0.2, 0.35] as [number, number, number],
+      mapBrightness: 8,
+      baseColor: [0.12, 0.16, 0.3] as [number, number, number],
       markerColor: [0.4, 0.75, 1.0] as [number, number, number],
-      glowColor: [0.08, 0.12, 0.3] as [number, number, number],
-      arcColor: [0.35, 0.65, 1.0] as [number, number, number],
+      glowColor: [0.05, 0.08, 0.2] as [number, number, number],
+      arcColor: [0.4, 0.7, 1.0] as [number, number, number],
     }
   }
   return {
