@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { nextTick, onMounted, onUnmounted, ref } from 'vue'
+import { nextTick, onMounted, onUnmounted, ref, watchEffect } from 'vue'
 import { Toaster } from '@/components/ui/sonner'
 import { useAppStore } from '@/stores/app'
 import { destroyInitManager, initApp } from '@/utils/init'
@@ -12,6 +12,10 @@ import Provider from './components/Provider.vue'
 const appStore = useAppStore()
 
 const isReady = ref(false)
+
+watchEffect(() => {
+  document.documentElement.classList.toggle('no-glass', !appStore.enableGlassEffect)
+})
 
 onMounted(async () => {
   try {

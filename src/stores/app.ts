@@ -158,6 +158,14 @@ const useAppStore = defineStore('app', () => {
     return false
   })
 
+  const enableGlassEffect = computed<boolean>(() => {
+    const settings = publicSettings.value?.theme_settings
+    if (settings && typeof settings.enableGlassEffect === 'boolean') {
+      return settings.enableGlassEffect
+    }
+    return true
+  })
+
   // 计算属性：ICP 备案配置
   const icpEnabled = computed<boolean>(() => {
     const settings = publicSettings.value?.theme_settings
@@ -335,6 +343,7 @@ const useAppStore = defineStore('app', () => {
     visitorInfoCardEnabled,
     hideAdminEntryWhenLoggedOut,
     disablePageAnimation,
+    enableGlassEffect,
     icpEnabled,
     icpNumber,
     icpUrl,

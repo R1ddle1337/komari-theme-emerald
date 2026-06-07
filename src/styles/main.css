@@ -162,3 +162,13 @@
     justify-content: center;
   }
 }
+
+/* Disable glass effect globally when toggled off */
+.no-glass * {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+.no-glass body {
+  background-image: none !important;
+}
