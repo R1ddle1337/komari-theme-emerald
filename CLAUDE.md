@@ -5,11 +5,19 @@
 Every change must follow these steps in order:
 
 1. Bump `version` in `komari-theme.json` (semver, match release tag)
-2. `bun run build` — produces `komari-theme-emerald-build-<sha>.zip`
-3. `git add -A && git commit && git push origin master`
-4. `gh release create vX.Y.Z --repo R1ddle1337/komari-theme-emerald --title "..." --notes "..." <zip-file>`
+2. **Clean old zips**: `rm -f komari-theme-emerald-build-*.zip`
+3. `bun run build` — produces `komari-theme-emerald-build-<sha>.zip`
+4. `git add -A && git commit && git push origin master`
+5. `gh release create vX.Y.Z ./komari-theme-emerald-build-<sha>.zip --repo R1ddle1337/komari-theme-emerald --title "vX.Y.Z" --notes "..."`
 
 All three version numbers must match: `komari-theme.json` version = git tag = release title.
+
+### Pitfalls
+
+- **Always clean old zips before build** — the `*.zip` glob will upload all zips if multiple exist, causing Komari to fail parsing the release.
+- **Version bump must happen before `bun run build`** — the zip packages `komari-theme.json` at build time. If version is stale in the file, the zip will carry the wrong version and Komari won't detect the update.
+- **After git revert operations, verify version** — reverts can silently reset the version field. Always `grep '"version"' komari-theme.json` before releasing.
+- **Single zip per release** — Komari expects exactly one zip asset. Multiple assets = update detection failure.
 
 ## Versioning
 
