@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Icon } from '@iconify/vue'
-import { computed, inject, ref } from 'vue'
+import { computed, inject, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
@@ -28,6 +28,22 @@ function selectShader(value: ShaderType) {
   appStore.shaderType = value
   showShaderMenu.value = false
 }
+
+function handleClickOutside(e: MouseEvent) {
+  if (!showShaderMenu.value) return
+  const target = e.target as HTMLElement
+  // 如果点击的是菜单内部元素或者触发按钮，不关闭
+  if (target.closest('.shader-menu-container')) return
+  showShaderMenu.value = false
+}
+
+onMounted(() => {
+  document.addEventListener('click', handleClickOutside, true)
+})
+
+onBeforeUnmount(() => {
+  document.removeEventListener('click', handleClickOutside, true)
+})
 
 const actionButtons = computed(() => {
   const buttons = [
@@ -80,10 +96,10 @@ const sitename = computed(() => appStore.publicSettings?.sitename || 'Komari Mon
       <TooltipProvider :delay-duration="200">
         <div class="flex items-center gap-2">
           <!-- Shader背景选择器 -->
-          <div class="relative">
+          <div class="relative shader-menu-container">
             <Tooltip>
               <TooltipTrigger as-child>
-                <Button variant="ghost" size="icon-sm" @click="showShaderMenu = !showShaderMenu">
+                <Button variant="ghost" size="icon-sm" @click.stop="showShaderMenu = !showShaderMenu">
                   <Icon icon="icon-park-outline:pic" :width="18" :height="18" />
                 </Button>
               </TooltipTrigger>
@@ -99,14 +115,15 @@ const sitename = computed(() => appStore.publicSettings?.sitename || 'Komari Mon
             >
               <div
                 v-if="showShaderMenu"
-                class="absolute right-0 top-full mt-2 w-32 rounded-lg border border-border bg-popover/90 backdrop-blur-xl p-1 shadow-lg z-50"
+                class="absolute right-0 top-full mt-2 w-32 rounded-lg border border-border bg-popover/90 backdrop-blur-xl p-1 shadow-lg"
               >
                 <button
                   v-for="opt in shaderOptions"
                   :key="opt.value"
-                  class="flex items-center gap-2 w-full rounded-md px-2.5 py-1.5 text-sm transition-colors hover:bg-accent/50"
+                  type="button"
+                  class="flex items-center gap-2 w-full rounded-md px-2.5 py-1.5 text-sm transition-colors hover:bg-accent/50 cursor-pointer"
                   :class="appStore.shaderType === opt.value ? 'text-foreground font-medium bg-accent/30' : 'text-muted-foreground'"
-                  @click="selectShader(opt.value)"
+                  @click.stop="selectShader(opt.value)"
                 >
                   <Icon :icon="opt.icon" :width="16" :height="16" />
                   <span>{{ opt.label }}</span>
@@ -127,8 +144,4 @@ const sitename = computed(() => appStore.publicSettings?.sitename || 'Komari Mon
       </TooltipProvider>
     </div>
   </div>
-  <!-- Click outside to close shader menu -->
-  <Teleport to="body">
-    <div v-if="showShaderMenu" class="fixed inset-0 z-9" @click="showShaderMenu = false" />
-  </Teleport>
 </template>
