@@ -182,7 +182,7 @@ onMounted(async () => {
     <div :class="cardGridClass">
       <CardX
         hoverable
-        class="group h-full bg-background/50 border-none hover:bg-background backdrop-blur-sm md:backdrop-blur-none transition-all"
+        class="group h-full backdrop-blur-xl backdrop-saturate-150 bg-background/40 border-none hover:bg-background/60 ring-1 ring-foreground/[0.06] shadow-sm rounded-lg transition-all"
         :class="showEarth ? 'col-span-4 row-span-1 col-start-1 row-start-1' : 'col-span-1 min-h-18 md:min-h-28'"
         content-class="h-full !p-3"
       >
@@ -211,7 +211,7 @@ onMounted(async () => {
       </CardX>
       <CardX
         hoverable
-        class="group h-full bg-background/50 border-none hover:bg-background backdrop-blur-sm md:backdrop-blur-none transition-all"
+        class="group h-full backdrop-blur-xl backdrop-saturate-150 bg-background/40 border-none hover:bg-background/60 ring-1 ring-foreground/[0.06] shadow-sm rounded-lg transition-all"
         :class="showEarth ? 'col-span-4 row-span-1 col-start-1 row-start-2' : 'col-span-1 min-h-18 md:min-h-28'"
         content-class="h-full !p-3"
       >
@@ -243,7 +243,7 @@ onMounted(async () => {
       >
         <CardX
           hoverable
-          class="group h-full bg-background/50 border-none hover:bg-background backdrop-blur-sm md:backdrop-blur-none transition-all"
+          class="group h-full backdrop-blur-xl backdrop-saturate-150 bg-background/40 border-none hover:bg-background/60 ring-1 ring-foreground/[0.06] shadow-sm rounded-lg transition-all"
           content-class="h-full !p-3" @click="openFinanceCard = !openFinanceCard"
         >
           <div class="flex h-full flex-col justify-between gap-1">
@@ -272,7 +272,7 @@ onMounted(async () => {
         </CardX>
         <CardX
           hoverable
-          class="absolute top-0 left-1/2 -translate-x-[50%] -translate-y-[25%] z-20 w-[260%] max-w-88 h-42 group bg-background/50 rounded-lg shadow-xl border-none backdrop-blur-lg transition-all"
+          class="absolute top-0 left-1/2 -translate-x-[50%] -translate-y-[25%] z-20 w-[260%] max-w-88 h-42 group bg-background/40 rounded-lg shadow-xl border-none backdrop-blur-xl backdrop-saturate-150 ring-1 ring-foreground/[0.06] transition-all"
           :class="openFinanceCard ? 'opacity-100 scale-100  -translate-y-[5%]' : 'opacity-0 pointer-events-none scale-50'"
           content-class="h-full !p-4" @click="openFinanceCard = false"
         >
@@ -328,7 +328,7 @@ onMounted(async () => {
       </div>
       <CardX
         hoverable
-        class="group bg-background/50 border-none hover:bg-background backdrop-blur-sm md:backdrop-blur-none transition-all"
+        class="group backdrop-blur-xl backdrop-saturate-150 bg-background/40 border-none hover:bg-background/60 ring-1 ring-foreground/[0.06] shadow-sm rounded-lg transition-all"
         :class="showEarth ? 'col-span-4 row-span-1 col-start-5 row-start-2' : 'col-span-1 min-h-18 md:min-h-28'"
         content-class="h-full !p-3"
       >
@@ -364,7 +364,7 @@ onMounted(async () => {
 
       <CardX
         hoverable
-        class="group bg-background/50 border-none hover:bg-background backdrop-blur-sm md:backdrop-blur-none transition-all"
+        class="group backdrop-blur-xl backdrop-saturate-150 bg-background/40 border-none hover:bg-background/60 ring-1 ring-foreground/[0.06] shadow-sm rounded-lg transition-all"
         :class="showEarth ? 'col-span-4 row-span-1 col-start-9 row-start-1' : 'col-span-1 min-h-18 md:min-h-28'"
         content-class="h-full !p-3"
       >
@@ -390,7 +390,7 @@ onMounted(async () => {
       </CardX>
       <CardX
         hoverable
-        class="group bg-background/50 border-none hover:bg-background backdrop-blur-sm md:backdrop-blur-none transition-all"
+        class="group backdrop-blur-xl backdrop-saturate-150 bg-background/40 border-none hover:bg-background/60 ring-1 ring-foreground/[0.06] shadow-sm rounded-lg transition-all"
         :class="showEarth ? 'col-span-4 row-span-1 col-start-9 row-start-2' : 'col-span-1 min-h-18 md:min-h-28'"
         content-class="h-full !p-3"
       >
