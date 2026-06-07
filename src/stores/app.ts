@@ -31,7 +31,12 @@ const useAppStore = defineStore('app', () => {
   const lang = ref<Lang>('zh-CN')
   const publicSettings = ref<PublicSettings>()
   const nodeSelectedGroup = useStorageAsync<string>('nodeSelectedGroup', 'all', localStorage)
-  const shaderType = useStorageAsync<ShaderType>('shaderType', 'bubbles', localStorage)
+  const shaderType = ref<ShaderType>((localStorage.getItem('shaderType') as ShaderType) || 'bubbles')
+
+  // 同步持久化 shaderType
+  watch(shaderType, (val) => {
+    localStorage.setItem('shaderType', val)
+  })
   const isLoggedIn = ref<boolean>(false)
   const connectionError = ref<boolean>(false)
 
