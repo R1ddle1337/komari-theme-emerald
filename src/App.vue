@@ -37,7 +37,11 @@ onUnmounted(() => {
 <template>
   <Provider>
     <Background />
-
+    <div v-if="appStore.enableGlassEffect" class="glass-orbs" aria-hidden="true">
+      <div class="glass-orb glass-orb-1" />
+      <div class="glass-orb glass-orb-2" />
+      <div class="glass-orb glass-orb-3" />
+    </div>
     <Transition
       enter-active-class="transition-all duration-100 ease-out" enter-from-class="opacity-0 backdrop-blur-0"
       enter-to-class="opacity-100 backdrop-blur-sm" leave-active-class="transition-all duration-100 ease-in"
@@ -67,4 +71,75 @@ onUnmounted(() => {
   </Provider>
 </template>
 
+<style>
+.glass-orbs {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
 
+.glass-orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(80px);
+}
+
+.glass-orb-1 {
+  width: 50vw;
+  height: 50vh;
+  top: -10%;
+  left: -5%;
+  background: oklch(0.75 0.12 240 / 0.3);
+  animation: orb-float-1 18s ease-in-out infinite alternate;
+}
+
+.glass-orb-2 {
+  width: 40vw;
+  height: 45vh;
+  bottom: -5%;
+  right: -5%;
+  background: oklch(0.78 0.1 170 / 0.25);
+  animation: orb-float-2 22s ease-in-out infinite alternate;
+}
+
+.glass-orb-3 {
+  width: 35vw;
+  height: 35vh;
+  top: 30%;
+  left: 40%;
+  background: oklch(0.8 0.09 310 / 0.2);
+  animation: orb-float-3 25s ease-in-out infinite alternate;
+}
+
+.dark .glass-orb-1 {
+  background: oklch(0.25 0.12 240 / 0.4);
+}
+
+.dark .glass-orb-2 {
+  background: oklch(0.22 0.1 170 / 0.35);
+}
+
+.dark .glass-orb-3 {
+  background: oklch(0.2 0.09 310 / 0.3);
+}
+
+@keyframes orb-float-1 {
+  0% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(8%, 12%) scale(1.1); }
+  100% { transform: translate(-5%, 8%) scale(0.95); }
+}
+
+@keyframes orb-float-2 {
+  0% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(-10%, -8%) scale(1.08); }
+  100% { transform: translate(5%, -12%) scale(0.98); }
+}
+
+@keyframes orb-float-3 {
+  0% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(12%, -6%) scale(1.05); }
+  100% { transform: translate(-8%, 10%) scale(1.02); }
+}
+</style>
