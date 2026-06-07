@@ -115,7 +115,7 @@ const sitename = computed(() => appStore.publicSettings?.sitename || 'Komari Mon
             >
               <div
                 v-if="showShaderMenu"
-                class="absolute right-0 top-full mt-2 w-32 rounded-lg border border-border bg-popover/90 backdrop-blur-xl p-1 shadow-lg"
+                class="absolute right-0 top-full mt-2 w-32 rounded-lg border border-border bg-popover/90 backdrop-blur-xl p-1 shadow-lg z-[100]"
               >
                 <button
                   v-for="opt in shaderOptions"
