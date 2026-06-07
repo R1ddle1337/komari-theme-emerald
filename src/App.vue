@@ -91,7 +91,7 @@ onUnmounted(() => {
   height: 50vh;
   top: -10%;
   left: -5%;
-  background: oklch(0.75 0.12 240 / 0.3);
+  background: oklch(0.72 0.15 250 / 0.3);
   animation: orb-float-1 18s ease-in-out infinite alternate;
 }
 
@@ -100,7 +100,7 @@ onUnmounted(() => {
   height: 45vh;
   bottom: -5%;
   right: -5%;
-  background: oklch(0.78 0.1 170 / 0.25);
+  background: oklch(0.75 0.14 330 / 0.28);
   animation: orb-float-2 22s ease-in-out infinite alternate;
 }
 
@@ -109,20 +109,20 @@ onUnmounted(() => {
   height: 35vh;
   top: 30%;
   left: 40%;
-  background: oklch(0.8 0.09 310 / 0.2);
+  background: oklch(0.7 0.12 290 / 0.22);
   animation: orb-float-3 25s ease-in-out infinite alternate;
 }
 
 .dark .glass-orb-1 {
-  background: oklch(0.25 0.12 240 / 0.4);
+  background: oklch(0.28 0.14 250 / 0.45);
 }
 
 .dark .glass-orb-2 {
-  background: oklch(0.22 0.1 170 / 0.35);
+  background: oklch(0.25 0.13 330 / 0.4);
 }
 
 .dark .glass-orb-3 {
-  background: oklch(0.2 0.09 310 / 0.3);
+  background: oklch(0.22 0.11 290 / 0.35);
 }
 
 @keyframes orb-float-1 {

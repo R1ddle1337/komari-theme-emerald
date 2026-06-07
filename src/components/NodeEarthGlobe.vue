@@ -318,19 +318,19 @@ const themeColors = computed(() => {
     return {
       dark: 1,
       mapBrightness: 5,
-      baseColor: [0.15, 0.2, 0.35] as [number, number, number],
-      markerColor: [0.4, 0.75, 1.0] as [number, number, number],
-      glowColor: [0.08, 0.12, 0.3] as [number, number, number],
-      arcColor: [0.35, 0.65, 1.0] as [number, number, number],
+      baseColor: [0.18, 0.15, 0.3] as [number, number, number],
+      markerColor: [0.7, 0.4, 0.9] as [number, number, number],
+      glowColor: [0.12, 0.08, 0.25] as [number, number, number],
+      arcColor: [0.6, 0.35, 0.95] as [number, number, number],
     }
   }
   return {
     dark: 0,
     mapBrightness: 7,
-    baseColor: [0.97, 0.97, 1] as [number, number, number],
-    markerColor: [0.18, 0.45, 0.9] as [number, number, number],
-    glowColor: [0.9, 0.93, 1] as [number, number, number],
-    arcColor: [0.18, 0.45, 0.9] as [number, number, number],
+    baseColor: [0.97, 0.95, 1] as [number, number, number],
+    markerColor: [0.4, 0.3, 0.9] as [number, number, number],
+    glowColor: [0.95, 0.9, 1] as [number, number, number],
+    arcColor: [0.6, 0.3, 0.9] as [number, number, number],
   }
 })
 
@@ -628,10 +628,10 @@ function formatRate(bytesPerSec: number): string {
 <style scoped>
 .earth-globe-canvas {
   contain: layout paint;
-  filter: drop-shadow(0 0 12px oklch(0.6 0.15 250 / 0.3));
+  filter: drop-shadow(0 0 12px oklch(0.6 0.15 280 / 0.3));
 }
 
 :root.dark .earth-globe-canvas {
-  filter: drop-shadow(0 0 20px oklch(0.5 0.18 250 / 0.5));
+  filter: drop-shadow(0 0 20px oklch(0.45 0.18 290 / 0.5));
 }
 </style>
