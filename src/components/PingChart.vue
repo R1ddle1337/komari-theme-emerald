@@ -613,7 +613,7 @@ onBeforeUnmount(() => {
         >
           <div
             v-for="task in latestValues" :key="task.id"
-            class="p-2 rounded-lg backdrop-blur-xl backdrop-saturate-150 bg-background/40 hover:bg-background/60 hover:shadow-[0_0_0_2px] hover:shadow-primary/10 flex gap-3 cursor-pointer select-none transition-all items-center ring-1 ring-foreground/[0.06]"
+            class="p-2 rounded-lg backdrop-blur-xl backdrop-saturate-150 bg-background/40 hover:bg-background/60 hover:shadow-[0_0_0_2px] hover:shadow-primary/10 flex gap-3 cursor-pointer select-none transition-all items-center ring-1 ring-foreground/[0.06] glass-hover-blur"
             :class="[!selectedTaskIds.includes(task.id) && 'opacity-30']"
             :onmouseover="(e: MouseEvent) => ((e.currentTarget as HTMLElement).style.borderColor = task.color)"
             :onmouseout="(e: MouseEvent) => ((e.currentTarget as HTMLElement).style.borderColor = '')"
@@ -724,7 +724,7 @@ onBeforeUnmount(() => {
         </div>
 
         <!-- 图表 -->
-        <div class="h-80 bg-background/40 backdrop-blur-xl backdrop-saturate-150 p-4 rounded-lg ring-1 ring-foreground/[0.06] shadow-sm">
+        <div class="h-80 bg-background/40 backdrop-blur-xl backdrop-saturate-150 p-4 rounded-lg ring-1 ring-foreground/[0.06] shadow-sm glass-hover-blur">
           <VChart :option="pingChartOption" autoresize />
         </div>
       </template>
