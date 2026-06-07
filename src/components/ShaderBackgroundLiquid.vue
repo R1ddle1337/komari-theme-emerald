@@ -136,8 +136,10 @@ vec2 rayMarch(vec3 rayDir, vec3 cameraOrigin) {
   float dist = EPS;
   for (int i = 0; i < MAX_ITER; i++) {
     dist = distfunc(pos);
-    totalDist += dist;
-    pos += dist * rayDir;
+    // Adaptive step: overshoot slightly when far from surface (safe for smooth SDF)
+    float step = dist * (totalDist > 10.0 ? 1.2 : 1.0);
+    totalDist += step;
+    pos += step * rayDir;
     if (dist < EPS || totalDist > MAX_DIST) {
       break;
     }
@@ -234,7 +236,6 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
   mat3 cam = setCamera(cameraOrigin, cameraTarget, 0.0);
 
   vec3 rayDir = cam * normalize(vec3(screenPos, 0.75));
-  vec2 dist = rayMarch(rayDir, cameraOrigin);
 
   float dayCycle = dot(light, vec3(0.0, 1.0, 0.0));
   float dayCycle1 = smoothstep(0.0, 0.5, max(0.0, dayCycle));
@@ -246,14 +247,20 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
   vec3 lens = lensFlare(rayDir, light, dayLight, dayCycle1);
   vec3 res;
 
-  if (dist.x < EPS) {
-    vec3 pos = cameraOrigin + dist.y * rayDir;
-    vec3 n = calculateNormals(pos);
-    float fog = clamp((dist.y - 18.0) * 0.05, 0.0, 1.0);
-    float fogY = (1.0 - clamp((pos.y + 0.5) * 0.5, 0.0, 1.0)) * 0.8;
-    res = mix(lighting(pos, rayDir, light, dayLight, dayCycle1, dayCycle2, n), sky, clamp(fog + fogY, 0.0, 1.0));
-  } else {
+  // Early sky exit: rays pointing upward won't hit the surface
+  if (rayDir.y > 0.35) {
     res = sky;
+  } else {
+    vec2 dist = rayMarch(rayDir, cameraOrigin);
+    if (dist.x < EPS) {
+      vec3 pos = cameraOrigin + dist.y * rayDir;
+      vec3 n = calculateNormals(pos);
+      float fog = clamp((dist.y - 18.0) * 0.05, 0.0, 1.0);
+      float fogY = (1.0 - clamp((pos.y + 0.5) * 0.5, 0.0, 1.0)) * 0.8;
+      res = mix(lighting(pos, rayDir, light, dayLight, dayCycle1, dayCycle2, n), sky, clamp(fog + fogY, 0.0, 1.0));
+    } else {
+      res = sky;
+    }
   }
 
   float vign = 1.0 - smoothstep(0.5, 1.0, length(screenPos) * 0.5);
