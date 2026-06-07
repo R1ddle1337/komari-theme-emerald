@@ -46,6 +46,11 @@ let isPointerDown = false
 let lastPointerX = 0
 let lastPointerY = 0
 let staticRedrawUntil = 0
+// Inertia: velocity accumulated during drag, decays after release
+let velocityPhi = 0
+let velocityTheta = 0
+const INERTIA_DECAY = 0.92
+const INERTIA_MIN = 0.0001
 
 function normalizePhi(value: number): number {
   const circle = Math.PI * 2
@@ -312,20 +317,20 @@ const themeColors = computed(() => {
   if (appStore.isDark) {
     return {
       dark: 1,
-      mapBrightness: 4,
-      baseColor: [0.32, 0.33, 0.4] as [number, number, number],
-      markerColor: [0.4, 0.7, 1.0] as [number, number, number],
-      glowColor: [0.2, 0.25, 0.45] as [number, number, number],
-      arcColor: [0.45, 0.75, 1.0] as [number, number, number],
+      mapBrightness: 5,
+      baseColor: [0.15, 0.2, 0.35] as [number, number, number],
+      markerColor: [0.4, 0.75, 1.0] as [number, number, number],
+      glowColor: [0.08, 0.12, 0.3] as [number, number, number],
+      arcColor: [0.35, 0.65, 1.0] as [number, number, number],
     }
   }
   return {
     dark: 0,
-    mapBrightness: 6,
-    baseColor: [1, 1, 1] as [number, number, number],
-    markerColor: [0.21, 0.51, 0.93] as [number, number, number],
-    glowColor: [1, 1, 1] as [number, number, number],
-    arcColor: [0.21, 0.51, 0.93] as [number, number, number],
+    mapBrightness: 7,
+    baseColor: [0.97, 0.97, 1] as [number, number, number],
+    markerColor: [0.18, 0.45, 0.9] as [number, number, number],
+    glowColor: [0.9, 0.93, 1] as [number, number, number],
+    arcColor: [0.18, 0.45, 0.9] as [number, number, number],
   }
 })
 
@@ -345,8 +350,8 @@ function buildInitialOptions(): COBEOptions {
     phi,
     theta,
     dark: colors.dark,
-    diffuse: 1.2,
-    mapSamples: 10000, // 地图采样点数，默认 16000
+    diffuse: 1.6,
+    mapSamples: 14000,
     mapBrightness: colors.mapBrightness,
     baseColor: colors.baseColor,
     markerColor: colors.markerColor,
@@ -354,8 +359,8 @@ function buildInitialOptions(): COBEOptions {
     markers: markers.value,
     arcs: arcs.value,
     arcColor: colors.arcColor,
-    arcWidth: 0.75,
-    arcHeight: 0.3,
+    arcWidth: 1,
+    arcHeight: 0.4,
     markerElevation: 0,
   }
 }
@@ -379,10 +384,23 @@ const { pause: pauseRaf, resume: resumeRaf } = useRafFn(
       return
     const prevPhi = phi
     const prevTheta = theta
+
     if (!isPointerDown && shouldAutoRotate.value)
-      targetPhi += 0.0025
-    phi += (targetPhi - phi) * 1
-    theta += (targetTheta - theta) * 1
+      targetPhi += 0.003
+
+    // Apply inertia when not dragging and not auto-rotating
+    if (!isPointerDown && !shouldAutoRotate.value) {
+      if (Math.abs(velocityPhi) > INERTIA_MIN || Math.abs(velocityTheta) > INERTIA_MIN) {
+        targetPhi += velocityPhi
+        targetTheta = clampTheta(targetTheta + velocityTheta)
+        velocityPhi *= INERTIA_DECAY
+        velocityTheta *= INERTIA_DECAY
+      }
+    }
+
+    // Smooth lerp for fluid motion
+    phi += (targetPhi - phi) * 0.12
+    theta += (targetTheta - theta) * 0.12
     if (
       Math.abs(phi - prevPhi) < ORIENTATION_IDLE_EPSILON
       && Math.abs(theta - prevTheta) < ORIENTATION_IDLE_EPSILON
@@ -511,6 +529,8 @@ function onPointerDown(e: PointerEvent) {
   isPointerDown = true
   lastPointerX = e.clientX
   lastPointerY = e.clientY
+  velocityPhi = 0
+  velocityTheta = 0
   const target = e.currentTarget as HTMLElement
   target.setPointerCapture(e.pointerId)
 }
@@ -521,8 +541,13 @@ function onPointerMove(e: PointerEvent) {
   const deltaY = e.clientY - lastPointerY
   lastPointerX = e.clientX
   lastPointerY = e.clientY
-  targetPhi += deltaX / 200
-  targetTheta = clampTheta(targetTheta + deltaY / 300)
+  const dphi = deltaX / 200
+  const dtheta = deltaY / 300
+  targetPhi += dphi
+  targetTheta = clampTheta(targetTheta + dtheta)
+  // Track velocity for inertia on release
+  velocityPhi = dphi * 0.6
+  velocityTheta = dtheta * 0.6
 }
 function onPointerUp(e: PointerEvent) {
   isPointerDown = false
@@ -603,5 +628,10 @@ function formatRate(bytesPerSec: number): string {
 <style scoped>
 .earth-globe-canvas {
   contain: layout paint;
+  filter: drop-shadow(0 0 12px oklch(0.6 0.15 250 / 0.3));
+}
+
+:root.dark .earth-globe-canvas {
+  filter: drop-shadow(0 0 20px oklch(0.5 0.18 250 / 0.5));
 }
 </style>
