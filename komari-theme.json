@@ -2,9 +2,9 @@
   "name": "Komari Emerald",
   "short": "Emerald",
   "description": "An emerald theme for Komari",
-  "version": "1.8.1",
+  "version": "1.8.2",
   "author": "Riddle & Tokinx",
-  "url": "https://github.com/Tokinx/komari-theme-emerald",
+  "url": "https://github.com/R1ddle1337/komari-theme-emerald",
   "preview": "preview.png",
   "configuration": {
     "type": "managed",
