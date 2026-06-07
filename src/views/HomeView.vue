@@ -116,14 +116,14 @@ function getNodeItemTransitionStyle(index: number): Record<string, string> {
 <template>
   <div class="home-view">
     <div v-if="appStore.connectionError" class="alert px-4">
-      <Alert variant="destructive" class="border-none backdrop-blur-xs bg-red-400/10 rounded-md">
+      <Alert variant="destructive" class="border-none backdrop-blur-xl backdrop-saturate-150 bg-red-400/10 rounded-lg ring-1 ring-red-500/[0.1]">
         <AlertTitle>RPC 服务错误</AlertTitle>
         <AlertDescription>连接服务器失败，请检查网络设置或刷新页面后再试。</AlertDescription>
       </Alert>
     </div>
 
     <div v-if="appStore.alertEnabled && appStore.alertContent" class="alert px-4">
-      <Alert class="border-none bg-background/60 backdrop-blur-xs rounded-md">
+      <Alert class="border-none backdrop-blur-xl backdrop-saturate-150 bg-background/40 rounded-lg ring-1 ring-foreground/[0.06] shadow-sm">
         <AlertTitle v-if="appStore.alertTitle">
           {{ appStore.alertTitle }}
         </AlertTitle>
@@ -147,7 +147,7 @@ function getNodeItemTransitionStyle(index: number): Record<string, string> {
         <Tabs v-model="appStore.nodeSelectedGroup" class="w-full flex-col gap-4">
           <div class="flex gap-2 items-center flex-nowrap">
             <div class="min-w-0 flex-1 overflow-x-auto rounded-sm pointer-events-none">
-              <TabsList class="w-max h-8 bg-background/50 backdrop-blur-xl rounded-md pointer-events-auto">
+              <TabsList class="w-max h-8 backdrop-blur-xl backdrop-saturate-150 bg-background/40 rounded-lg ring-1 ring-foreground/[0.06] shadow-sm pointer-events-auto">
                 <TabsTrigger
                   v-for="g in groups" :key="g.name" :value="g.name"
                   class="h-6.5 flex-none shrink-0 text-xs border-none data-[state=active]:text-green-600 shadow-none rounded-sm"
@@ -159,7 +159,7 @@ function getNodeItemTransitionStyle(index: number): Record<string, string> {
             <div class="search flex gap-2 items-center pointer-events-auto">
               <Button
                 variant="outline" size="icon" aria-label="卡片视图"
-                class="w-8 h-8 border-none  bg-background/50 backdrop-blur-xs shadow-none hover:bg-background/60 rounded-md"
+                class="w-8 h-8 border-none backdrop-blur-xl backdrop-saturate-150 bg-background/40 shadow-none hover:bg-background/60 rounded-lg ring-1 ring-foreground/[0.06]"
                 :class="[appStore.nodeViewMode === 'card' ? '!text-green-600 !bg-background' : '']"
                 @click="appStore.nodeViewMode = 'card'"
               >
@@ -167,7 +167,7 @@ function getNodeItemTransitionStyle(index: number): Record<string, string> {
               </Button>
               <Button
                 variant="outline" size="icon" aria-label="列表视图"
-                class="w-8 h-8 border-none bg-background/50 backdrop-blur-xs shadow-none hover:bg-background/60 rounded-md"
+                class="w-8 h-8 border-none backdrop-blur-xl backdrop-saturate-150 bg-background/40 shadow-none hover:bg-background/60 rounded-lg ring-1 ring-foreground/[0.06]"
                 :class="[appStore.nodeViewMode === 'list' ? '!text-green-600 !bg-background' : '']"
                 @click="appStore.nodeViewMode = 'list'"
               >
@@ -177,7 +177,7 @@ function getNodeItemTransitionStyle(index: number): Record<string, string> {
                 <div class="absolute top-0 right-0 ">
                   <Input
                     v-model="searchText" placeholder="搜索节点名称、地区、系统"
-                    class="transition-all placeholder:text-transparent border-none shadow-none w-8 h-8  bg-background/50 backdrop-blur-xs rounded-md hover:!bg-background/60 focus:!w-60 focus:!pl-7.5 focus:placeholder:!text-muted-foreground focus:!bg-background/80 focus:!ring-slate-500/10"
+                    class="transition-all placeholder:text-transparent border-none shadow-none w-8 h-8 backdrop-blur-xl backdrop-saturate-150 bg-background/40 rounded-lg ring-1 ring-foreground/[0.06] hover:!bg-background/60 focus:!w-60 focus:!pl-7.5 focus:placeholder:!text-muted-foreground focus:!bg-background/60 focus:!ring-foreground/[0.1]"
                   />
                   <Icon
                     icon="tabler:search" :width="14" :height="14"

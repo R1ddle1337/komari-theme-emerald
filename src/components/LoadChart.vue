@@ -842,7 +842,7 @@ onMounted(() => {
   <div class="flex flex-col gap-4">
     <!-- 时间选择器 -->
     <Tabs v-model="selectedView" class="w-full items-center">
-      <TabsList class="h-8 bg-background/50 backdrop-blur-xl pointer-events-auto rounded-md">
+      <TabsList class="h-8 backdrop-blur-xl backdrop-saturate-150 bg-background/40 pointer-events-auto rounded-lg ring-1 ring-foreground/[0.06] shadow-sm">
         <TabsTrigger
           v-for="view in availableViews" :key="view.label" :value="view.label"
           class="h-6.5 text-xs border-none data-[state=active]:text-green-600 shadow-none rounded-sm"

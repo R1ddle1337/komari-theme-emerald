@@ -568,7 +568,7 @@ onBeforeUnmount(() => {
     <!-- 时间选择器 -->
     <Tabs v-model="selectedView" class="w-full items-center">
       <div class="min-w-0 flex-1 overflow-x-auto rounded-sm pointer-events-auto">
-        <TabsList class="w-max h-8 bg-background/50 backdrop-blur-xl rounded-md">
+        <TabsList class="w-max h-8 backdrop-blur-xl backdrop-saturate-150 bg-background/40 rounded-lg ring-1 ring-foreground/[0.06] shadow-sm">
           <TabsTrigger
             v-for="view in availableViews" :key="view.label" :value="view.label"
             class="h-6.5 flex-none shrink-0 text-xs border-none data-[state=active]:text-green-600 shadow-none rounded-sm"
@@ -580,14 +580,14 @@ onBeforeUnmount(() => {
       <div class="md:flex-1" />
       <div class="flex gap-2 items-center">
         <Button
-          variant="ghost" size="xs" class="h-7 rounded-sm bg-background/50 hover:bg-background border-none"
+          variant="ghost" size="xs" class="h-7 rounded-lg backdrop-blur-xl backdrop-saturate-150 bg-background/40 hover:bg-background/60 border-none ring-1 ring-foreground/[0.06]"
           :class="selectedTaskIds.length === tasks.length ? 'shadow-[0_0_0_2px] shadow-green-600/10 text-green-600' : ''"
           @click="showAllTasks"
         >
           全选
         </Button>
         <Button
-          variant="ghost" size="xs" class="h-7 rounded-sm bg-background/50 hover:bg-background border-none"
+          variant="ghost" size="xs" class="h-7 rounded-lg backdrop-blur-xl backdrop-saturate-150 bg-background/40 hover:bg-background/60 border-none ring-1 ring-foreground/[0.06]"
           :class="!selectedTaskIds.length && 'shadow-[0_0_0_2px] shadow-green-600/10 text-green-600'"
           @click="hideAllTasks"
         >
@@ -613,7 +613,7 @@ onBeforeUnmount(() => {
         >
           <div
             v-for="task in latestValues" :key="task.id"
-            class="p-2 rounded-md bg-background/50 hover:bg-background hover:shadow-[0_0_0_2px] hover:shadow-primary/10 flex gap-3 cursor-pointer select-none transition-all items-center"
+            class="p-2 rounded-lg backdrop-blur-xl backdrop-saturate-150 bg-background/40 hover:bg-background/60 hover:shadow-[0_0_0_2px] hover:shadow-primary/10 flex gap-3 cursor-pointer select-none transition-all items-center ring-1 ring-foreground/[0.06]"
             :class="[!selectedTaskIds.includes(task.id) && 'opacity-30']"
             :onmouseover="(e: MouseEvent) => ((e.currentTarget as HTMLElement).style.borderColor = task.color)"
             :onmouseout="(e: MouseEvent) => ((e.currentTarget as HTMLElement).style.borderColor = '')"
@@ -701,7 +701,7 @@ onBeforeUnmount(() => {
           <TooltipProvider>
             <div class="flex gap-2 items-center">
               <Button
-                variant="ghost" size="xs" class="h-7 rounded-sm bg-background/50 hover:bg-background border-none"
+                variant="ghost" size="xs" class="h-7 rounded-lg backdrop-blur-xl backdrop-saturate-150 bg-background/40 hover:bg-background/60 border-none ring-1 ring-foreground/[0.06]"
                 :class="cutPeak && 'shadow-[0_0_0_2px] shadow-green-600/10 text-green-600'" @click="cutPeak = !cutPeak"
               >
                 平滑峰值
