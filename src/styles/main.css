@@ -184,16 +184,18 @@
 }
 
 /* Disable glass effect globally when toggled off */
-.no-glass * {
+html.no-glass *,
+html.no-glass *::before,
+html.no-glass *::after {
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
 }
 
-.no-glass body {
+html.no-glass body {
   background-image: none !important;
 }
 
-.no-glass body::before {
+html.no-glass body::before {
   display: none !important;
 }
 

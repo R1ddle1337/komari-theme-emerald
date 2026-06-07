@@ -160,9 +160,13 @@ const useAppStore = defineStore('app', () => {
 
   const enableGlassEffect = computed<boolean>(() => {
     const settings = publicSettings.value?.theme_settings
-    if (settings && typeof settings.enableGlassEffect === 'boolean') {
-      return settings.enableGlassEffect
+    if (!settings || settings.enableGlassEffect === undefined || settings.enableGlassEffect === null) {
+      return true
     }
+    const val = settings.enableGlassEffect
+    if (typeof val === 'boolean') return val
+    if (val === 'true' || val === '1') return true
+    if (val === 'false' || val === '0') return false
     return true
   })
 
