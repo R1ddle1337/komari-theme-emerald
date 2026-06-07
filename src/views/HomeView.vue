@@ -12,7 +12,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useAppStore } from '@/stores/app'
 import { useNodesStore } from '@/stores/nodes'
 import { isNodeInGroup, parseNodeGroups } from '@/utils/groupHelper'
-import { isRegionMatch } from '@/utils/regionHelper'
+import { getRegionDisplayName, isRegionMatch } from '@/utils/regionHelper'
+import { getCountryCodeFromRegion } from '@/utils/geoHelper'
 
 defineOptions({ name: 'HomeView' })
 
@@ -56,11 +57,42 @@ const groups = computed(() => [
   ...nodesStore.groups.map(g => ({ tab: g, name: g })),
 ])
 
+// 按国家/地区聚合
+const regionGroups = computed(() => {
+  const regionMap = new Map<string, { emoji: string, name: string, count: number }>()
+  for (const node of nodesStore.nodes) {
+    const code = getCountryCodeFromRegion(node.region)
+    if (!code) continue
+    const emoji = node.region.trim()
+    if (!regionMap.has(code)) {
+      regionMap.set(code, { emoji, name: getRegionDisplayName(emoji), count: 0 })
+    }
+    regionMap.get(code)!.count++
+  }
+  // 按节点数量降序排列
+  return Array.from(regionMap.entries())
+    .sort((a, b) => b[1].count - a[1].count)
+    .map(([code, info]) => ({ tab: `${info.emoji} ${info.name}`, name: `region:${code}`, code }))
+})
+
+const allTabs = computed(() => [
+  ...groups.value,
+  ...regionGroups.value,
+])
+
 watch(
-  () => nodesStore.groups,
-  (gs) => {
+  () => [nodesStore.groups, regionGroups.value] as const,
+  ([gs]) => {
     const cur = appStore.nodeSelectedGroup
-    if (cur !== 'all' && !gs.includes(cur)) {
+    if (cur === 'all') return
+    if (cur.startsWith('region:')) {
+      // region tab 失效时回退
+      if (!regionGroups.value.some(r => r.name === cur)) {
+        appStore.nodeSelectedGroup = 'all'
+      }
+      return
+    }
+    if (!gs.includes(cur)) {
       appStore.nodeSelectedGroup = 'all'
     }
   },
@@ -87,7 +119,12 @@ function isNodeMatchSearch(node: typeof nodesStore.nodes[number], search: string
 }
 
 const groupNodeList = computed(() => {
-  return nodesStore.nodes.filter(node => isNodeInGroup(node.group, appStore.nodeSelectedGroup))
+  const selected = appStore.nodeSelectedGroup
+  if (selected.startsWith('region:')) {
+    const code = selected.slice(7) // "region:US" → "US"
+    return nodesStore.nodes.filter(node => getCountryCodeFromRegion(node.region) === code)
+  }
+  return nodesStore.nodes.filter(node => isNodeInGroup(node.group, selected))
 })
 
 const nodeList = computed(() => {
@@ -149,7 +186,7 @@ function getNodeItemTransitionStyle(index: number): Record<string, string> {
             <div class="min-w-0 flex-1 overflow-x-auto rounded-sm pointer-events-none">
               <TabsList class="w-max h-8 backdrop-blur-xl backdrop-saturate-150 bg-background/40 rounded-lg ring-1 ring-foreground/[0.06] shadow-sm pointer-events-auto">
                 <TabsTrigger
-                  v-for="g in groups" :key="g.name" :value="g.name"
+                  v-for="g in allTabs" :key="g.name" :value="g.name"
                   class="h-6.5 flex-none shrink-0 text-xs border-none data-[state=active]:text-green-600 shadow-none rounded-sm"
                 >
                   {{ g.tab }}
@@ -187,7 +224,7 @@ function getNodeItemTransitionStyle(index: number): Record<string, string> {
               </div>
             </div>
           </div>
-          <TabsContent v-for="g in groups" :key="g.name" :value="g.name" class="pointer-events-auto">
+          <TabsContent v-for="g in allTabs" :key="g.name" :value="g.name" class="pointer-events-auto">
             <TransitionGroup
               v-if="nodeList.length !== 0 && appStore.nodeViewMode === 'card'"
               :appear="!appStore.disablePageAnimation"
