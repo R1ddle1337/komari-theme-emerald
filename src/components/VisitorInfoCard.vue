@@ -179,25 +179,39 @@ function parseCfTrace(text: string): Record<string, string> {
 }
 
 async function fetchVisitorGeo(): Promise<VisitorGeoData | null> {
-  // Step 1: Get real outbound IP via Cloudflare (always respects proxy)
+  // Step 1: Get real outbound IP via services that require proxy in China
   let cfIp = ''
   let cfCountryCode = ''
-  try {
-    const traceText = await fetchText('https://1.1.1.1/cdn-cgi/trace', 3000)
-    const trace = parseCfTrace(traceText)
-    cfIp = trace.ip || ''
-    cfCountryCode = (trace.loc || '').toUpperCase()
-  }
-  catch {
-    // fallback: try cloudflare on their domain
-    try {
+
+  const ipSources = [
+    async () => {
+      // ipify - blocked in China, must go through proxy
+      const text = await fetchText('https://api.ipify.org', 3000)
+      return { ip: text.trim(), loc: '' }
+    },
+    async () => {
+      // Cloudflare trace - returns ip + country code
+      const traceText = await fetchText('https://1.1.1.1/cdn-cgi/trace', 3000)
+      const trace = parseCfTrace(traceText)
+      return { ip: trace.ip || '', loc: (trace.loc || '').toUpperCase() }
+    },
+    async () => {
       const traceText = await fetchText('https://www.cloudflare.com/cdn-cgi/trace', 3000)
       const trace = parseCfTrace(traceText)
-      cfIp = trace.ip || ''
-      cfCountryCode = (trace.loc || '').toUpperCase()
+      return { ip: trace.ip || '', loc: (trace.loc || '').toUpperCase() }
+    },
+  ]
+
+  for (const source of ipSources) {
+    try {
+      const result = await source()
+      if (result.ip) {
+        cfIp = result.ip
+        cfCountryCode = result.loc
+        break
+      }
     }
     catch {
-      // both failed, continue to legacy loaders
     }
   }
 
