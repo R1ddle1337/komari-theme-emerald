@@ -724,7 +724,7 @@ onBeforeUnmount(() => {
         </div>
 
         <!-- 图表 -->
-        <div class="h-80 bg-background/50 p-4 rounded-md">
+        <div class="h-80 bg-background/40 backdrop-blur-xl backdrop-saturate-150 p-4 rounded-lg ring-1 ring-foreground/[0.06] shadow-sm">
           <VChart :option="pingChartOption" autoresize />
         </div>
       </template>
