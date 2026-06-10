@@ -88,6 +88,13 @@
         "help": "隐藏地球和总览卡片"
       },
       {
+        "key": "summaryCards",
+        "name": "总览卡片选择",
+        "type": "string",
+        "default": "memory,disk,finance,traffic,speedUp,speedDown",
+        "help": "自定义显示哪 6 个总览卡片，可选：memory(内存), disk(硬盘), finance(剩余价值), traffic(累计流量), speedUp(实时上行), speedDown(实时下行), connections(连接数)。用英文逗号分隔，选择 6 个"
+      },
+      {
         "key": "visitorInfoCardEnabled",
         "name": "访客信息卡片",
         "type": "switch",

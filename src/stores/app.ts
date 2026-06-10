@@ -141,6 +141,21 @@ const useAppStore = defineStore('app', () => {
     return false
   })
 
+  type SummaryCardType = 'memory' | 'disk' | 'finance' | 'traffic' | 'speedUp' | 'speedDown' | 'connections'
+  const VALID_SUMMARY_CARDS: SummaryCardType[] = ['memory', 'disk', 'finance', 'traffic', 'speedUp', 'speedDown', 'connections']
+  const DEFAULT_SUMMARY_CARDS: SummaryCardType[] = ['memory', 'disk', 'finance', 'traffic', 'speedUp', 'speedDown']
+
+  const summaryCards = computed<SummaryCardType[]>(() => {
+    const settings = publicSettings.value?.theme_settings
+    if (settings && typeof settings.summaryCards === 'string' && settings.summaryCards.trim()) {
+      const parsed = settings.summaryCards.split(',').map((s: string) => s.trim()).filter((s: string) => VALID_SUMMARY_CARDS.includes(s as SummaryCardType)) as SummaryCardType[]
+      if (parsed.length > 0) {
+        return parsed.slice(0, 6)
+      }
+    }
+    return DEFAULT_SUMMARY_CARDS
+  })
+
   const visitorInfoCardEnabled = computed<boolean>(() => {
     const settings = publicSettings.value?.theme_settings
     if (settings && typeof settings.visitorInfoCardEnabled === 'boolean') {
@@ -354,6 +369,7 @@ const useAppStore = defineStore('app', () => {
     stopEarth,
     hideEarth,
     hideGeneralCard,
+    summaryCards,
     visitorInfoCardEnabled,
     hideAdminEntryWhenLoggedOut,
     disablePageAnimation,

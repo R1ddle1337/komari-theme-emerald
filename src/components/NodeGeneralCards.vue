@@ -57,6 +57,21 @@ const totalTraffic = computed(() => {
   return { up, down }
 })
 
+// ==================== 连接数汇总 ====================
+const totalConnections = computed(() => {
+  const onlineNodes = summaryNodes.value.filter(node => node.online)
+  const tcp = onlineNodes.reduce((sum, node) => sum + (node.connections || 0), 0)
+  const udp = onlineNodes.reduce((sum, node) => sum + (node.connections_udp || 0), 0)
+  return { tcp, udp, total: tcp + udp }
+})
+
+function formatNumber(num: number): string {
+  if (num >= 100000) {
+    return `${(num / 1000).toFixed(1)}K`
+  }
+  return num.toLocaleString('zh-CN')
+}
+
 const formattedTrafficUp = computed(() => formatBytesSplit(totalTraffic.value.up, appStore.byteDecimals))
 const formattedTrafficDown = computed(() => formatBytesSplit(totalTraffic.value.down, appStore.byteDecimals))
 const totalTrafficTooltip = computed(() => formatBytesSplit(totalTraffic.value.up + totalTraffic.value.down, appStore.byteDecimals))
@@ -166,6 +181,24 @@ const cardGridClass = computed(() => showEarth.value
   ? 'h-42 -mt-42 md:mt-0 col-span-12 row-start-3 z-9 md:h-auto md:col-span-6 md:row-start-1 grid grid-cols-12 grid-rows-2 gap-2'
   : 'col-span-1 grid grid-cols-3 md:grid-cols-6 gap-2')
 
+// 根据卡片索引和地球显示状态，返回 grid 位置 class
+// 6 个卡片排列为 2 行 3 列（有地球时） 或 1 行 6 列（无地球时）
+const EARTH_POSITION_CLASSES = [
+  'col-span-4 row-span-1 col-start-1 row-start-1',
+  'col-span-4 row-span-1 col-start-1 row-start-2',
+  'col-span-4 row-span-1 col-start-5 row-start-1',
+  'col-span-4 row-span-1 col-start-5 row-start-2',
+  'col-span-4 row-span-1 col-start-9 row-start-1',
+  'col-span-4 row-span-1 col-start-9 row-start-2',
+]
+
+function getCardPositionClass(idx: number): string {
+  if (showEarth.value) {
+    return EARTH_POSITION_CLASSES[idx] ?? EARTH_POSITION_CLASSES[0]!
+  }
+  return 'col-span-1 min-h-18 md:min-h-28'
+}
+
 onMounted(async () => {
   exchangeRateBaseCurrency.value = financeHelper.getStoredFinanceCurrency()
   excludeFreeNodes.value = financeHelper.shouldExcludeFreeNodes()
@@ -180,75 +213,18 @@ onMounted(async () => {
     <NodeEarthGlobe v-if="showEarth" :nodes="globeNodes" class="col-span-12 col-start-1 md:col-span-6 md:col-start-7" />
 
     <div :class="cardGridClass">
-      <CardX
-        hoverable
-        class="group h-full backdrop-blur-xl backdrop-saturate-150 bg-background/40 border-none hover:bg-background/60 ring-1 ring-foreground/[0.06] shadow-sm rounded-lg transition-all glass-hover-blur"
-        :class="showEarth ? 'col-span-4 row-span-1 col-start-1 row-start-1' : 'col-span-1 min-h-18 md:min-h-28'"
-        content-class="h-full !p-3"
-      >
-        <div class="flex h-full flex-col justify-between gap-1">
-          <div class="flex items-start justify-between">
-            <span class="text-xs font-medium tracking-wider text-muted-foreground">内存用量</span>
-            <Icon
-              icon="tabler:cash" :width="20" :height="20"
-              class="text-slate-500/20 group-hover:text-slate-500 transition-colors"
-            />
-          </div>
-          <Transition v-bind="metricSwitchTransitionProps">
-            <div
-              :key="`memory-${summaryTransitionKey}`" class="flex items-baseline gap-1 min-w-0"
-              :style="getMetricSwitchStyle(0)"
-            >
-              <span class="text-md md:text-2xl font-bold leading-none tracking-tight">
-                {{ formattedMemoryUsed.value }}
-              </span>
-              <span class="text-[11px] md:text-xs font-medium text-muted-foreground truncate">
-                {{ formattedMemoryUsed.unit }} / {{ formattedMemoryTotal.value }} {{ formattedMemoryTotal.unit }}
-              </span>
-            </div>
-          </Transition>
-        </div>
-      </CardX>
-      <CardX
-        hoverable
-        class="group h-full backdrop-blur-xl backdrop-saturate-150 bg-background/40 border-none hover:bg-background/60 ring-1 ring-foreground/[0.06] shadow-sm rounded-lg transition-all glass-hover-blur"
-        :class="showEarth ? 'col-span-4 row-span-1 col-start-1 row-start-2' : 'col-span-1 min-h-18 md:min-h-28'"
-        content-class="h-full !p-3"
-      >
-        <div class="flex h-full flex-col justify-between gap-1">
-          <div class="flex items-start justify-between">
-            <span class="text-xs font-medium tracking-wider text-muted-foreground">硬盘用量</span>
-            <Icon
-              icon="tabler:server-2" :width="20" :height="20"
-              class="text-slate-500/20 group-hover:text-slate-500 transition-colors"
-            />
-          </div>
-          <Transition v-bind="metricSwitchTransitionProps">
-            <div
-              :key="`disk-${summaryTransitionKey}`" class="flex items-baseline gap-1 min-w-0"
-              :style="getMetricSwitchStyle(1)"
-            >
-              <span class="text-md md:text-2xl font-bold leading-none tracking-tight">{{ formattedDiskUsed.value
-              }}</span>
-              <span class="text-[11px] md:text-xs font-medium text-muted-foreground truncate">
-                {{ formattedDiskUsed.unit }} / {{ formattedDiskTotal.value }} {{ formattedDiskTotal.unit }}
-              </span>
-            </div>
-          </Transition>
-        </div>
-      </CardX>
-      <div
-        class="relative w-full h-full"
-        :class="showEarth ? 'col-span-4 row-span-1 col-start-5 row-start-1' : 'col-span-1 min-h-18 md:min-h-28'"
-      >
+      <template v-for="(cardType, idx) in appStore.summaryCards" :key="cardType">
+        <!-- 内存用量 -->
         <CardX
+          v-if="cardType === 'memory'"
           hoverable
           class="group h-full backdrop-blur-xl backdrop-saturate-150 bg-background/40 border-none hover:bg-background/60 ring-1 ring-foreground/[0.06] shadow-sm rounded-lg transition-all glass-hover-blur"
-          content-class="h-full !p-3" @click="openFinanceCard = !openFinanceCard"
+          :class="getCardPositionClass(idx)"
+          content-class="h-full !p-3"
         >
           <div class="flex h-full flex-col justify-between gap-1">
             <div class="flex items-start justify-between">
-              <span class="text-xs font-medium tracking-wider text-muted-foreground">剩余价值</span>
+              <span class="text-xs font-medium tracking-wider text-muted-foreground">内存用量</span>
               <Icon
                 icon="tabler:cash" :width="20" :height="20"
                 class="text-slate-500/20 group-hover:text-slate-500 transition-colors"
@@ -256,166 +232,277 @@ onMounted(async () => {
             </div>
             <Transition v-bind="metricSwitchTransitionProps">
               <div
-                :key="`remaining-value-${summaryTransitionKey}`"
-                class="flex items-baseline gap-1 min-w-0"
-                :style="getMetricSwitchStyle(2)"
+                :key="`memory-${summaryTransitionKey}`" class="flex items-baseline gap-1 min-w-0"
+                :style="getMetricSwitchStyle(idx)"
               >
                 <span class="text-md md:text-2xl font-bold leading-none tracking-tight">
-                  {{ formattedRemainingValue.symbol }}{{ formattedRemainingValue.value }}
+                  {{ formattedMemoryUsed.value }}
                 </span>
-                <span class="block cursor-help truncate text-[11px] md:text-xs font-medium text-muted-foreground">
-                  {{ formattedRemainingValue.currency }}
+                <span class="text-[11px] md:text-xs font-medium text-muted-foreground truncate">
+                  {{ formattedMemoryUsed.unit }} / {{ formattedMemoryTotal.value }} {{ formattedMemoryTotal.unit }}
                 </span>
               </div>
             </Transition>
           </div>
         </CardX>
+
+        <!-- 硬盘用量 -->
         <CardX
+          v-else-if="cardType === 'disk'"
           hoverable
-          class="absolute top-0 left-1/2 -translate-x-[50%] -translate-y-[25%] z-20 w-[260%] max-w-88 h-42 group bg-background/40 rounded-lg shadow-xl border-none backdrop-blur-xl backdrop-saturate-150 ring-1 ring-foreground/[0.06] transition-all"
-          :class="openFinanceCard ? 'opacity-100 scale-100  -translate-y-[5%]' : 'opacity-0 pointer-events-none scale-50'"
-          content-class="h-full !p-4" @click="openFinanceCard = false"
+          class="group h-full backdrop-blur-xl backdrop-saturate-150 bg-background/40 border-none hover:bg-background/60 ring-1 ring-foreground/[0.06] shadow-sm rounded-lg transition-all glass-hover-blur"
+          :class="getCardPositionClass(idx)"
+          content-class="h-full !p-3"
         >
-          <div class="flex h-full min-w-0 flex-col overflow-x-hidden overflow-y-auto">
-            <div class="shrink-0 grid grid-cols-3 gap-1">
-              <div v-for="item in financeSummaryItems" :key="item.label" class="min-w-0">
-                <div class="flex items-center text-xs font-medium text-muted-foreground">
-                  {{ item.label }}
-                </div>
-                <div class="flex min-w-0 mt-1 items-baseline truncate">
-                  <span class="shrink-0 text-xs mr-0.5 font-semibold leading-none text-muted-foreground">
-                    {{ item.symbol }}
-                  </span>
-                  <span class=" text-sm md:text-lg font-bold leading-none tracking-tight">
-                    {{ item.value }}
-                  </span>
-                </div>
-              </div>
+          <div class="flex h-full flex-col justify-between gap-1">
+            <div class="flex items-start justify-between">
+              <span class="text-xs font-medium tracking-wider text-muted-foreground">硬盘用量</span>
+              <Icon
+                icon="tabler:server-2" :width="20" :height="20"
+                class="text-slate-500/20 group-hover:text-slate-500 transition-colors"
+              />
             </div>
-            <div class="flex-1" />
-            <div class="shrink-0 flex flex-col flex-1">
-              <div class="flex mb-1 items-center justify-between gap-2">
-                <div class="flex items-center gap-1 text-xs font-medium tracking-wider text-muted-foreground">
-                  今日汇率
-                </div>
-                <select
-                  :value="exchangeRateBaseCurrency"
-                  class="shrink-0 rounded-sm border border-border/70 bg-background/70 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground outline-none transition-colors hover:text-foreground focus:text-foreground"
-                  aria-label="切换汇率基准币种" @click.stop @change.stop="setExchangeRateBaseCurrency"
-                >
-                  <option v-for="currency in financeRateCurrencies" :key="currency" :value="currency">
-                    {{ currency }}
-                  </option>
-                </select>
-              </div>
-              <div class="flex-1" />
-              <div class="grid grid-cols-2 gap-y-1 gap-x-4">
-                <div
-                  v-for="row in exchangeRateRows" :key="row.currency"
-                  class="text-[11px] flex items-center justify-between"
-                >
-                  <span class="text-muted-foreground">
-                    {{ row.currency }}
-                  </span>
-                  <span>
-                    {{ row.targetSymbol }}{{ row.rate }}
-                  </span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </CardX>
-      </div>
-      <CardX
-        hoverable
-        class="group backdrop-blur-xl backdrop-saturate-150 bg-background/40 border-none hover:bg-background/60 ring-1 ring-foreground/[0.06] shadow-sm rounded-lg transition-all glass-hover-blur"
-        :class="showEarth ? 'col-span-4 row-span-1 col-start-5 row-start-2' : 'col-span-1 min-h-18 md:min-h-28'"
-        content-class="h-full !p-3"
-      >
-        <div class="flex h-full flex-col justify-between gap-1">
-          <div class="flex items-start justify-between">
-            <span class="text-xs font-medium tracking-wider text-muted-foreground">累计流量</span>
-            <Icon
-              icon="tabler:download" :width="20" :height="20"
-              class="text-slate-500/20 group-hover:text-slate-500 transition-colors"
-            />
-          </div>
-          <DataTooltip
-            as="span" placement="top"
-            :content="`↑ ${formattedTrafficUp.value} ${formattedTrafficUp.unit}\n↓ ${formattedTrafficDown.value} ${formattedTrafficDown.unit}`"
-            class="min-w-0" content-class="whitespace-pre px-2 py-1 left-0 -translate-x-0 leading-normal"
-          >
             <Transition v-bind="metricSwitchTransitionProps">
               <div
-                :key="`traffic-${summaryTransitionKey}`" class="flex items-baseline gap-1"
-                :style="getMetricSwitchStyle(3)"
+                :key="`disk-${summaryTransitionKey}`" class="flex items-baseline gap-1 min-w-0"
+                :style="getMetricSwitchStyle(idx)"
               >
-                <span class="inline-block text-md md:text-2xl font-bold leading-none tracking-tight">
-                  {{ totalTrafficTooltip.value }}
-                </span>
-                <span class="inline-block text-[11px] md:text-xs font-medium text-muted-foreground">
-                  {{ totalTrafficTooltip.unit }}
+                <span class="text-md md:text-2xl font-bold leading-none tracking-tight">{{ formattedDiskUsed.value
+                }}</span>
+                <span class="text-[11px] md:text-xs font-medium text-muted-foreground truncate">
+                  {{ formattedDiskUsed.unit }} / {{ formattedDiskTotal.value }} {{ formattedDiskTotal.unit }}
                 </span>
               </div>
             </Transition>
-          </DataTooltip>
-        </div>
-      </CardX>
+          </div>
+        </CardX>
 
-      <CardX
-        hoverable
-        class="group backdrop-blur-xl backdrop-saturate-150 bg-background/40 border-none hover:bg-background/60 ring-1 ring-foreground/[0.06] shadow-sm rounded-lg transition-all glass-hover-blur"
-        :class="showEarth ? 'col-span-4 row-span-1 col-start-9 row-start-1' : 'col-span-1 min-h-18 md:min-h-28'"
-        content-class="h-full !p-3"
-      >
-        <div class="flex h-full flex-col justify-between gap-1">
-          <div class="flex items-start justify-between">
-            <span class="text-xs font-medium tracking-wider text-muted-foreground">实时上行</span>
-            <Icon
-              icon="tabler:chevrons-up" :width="20" :height="20"
-              class="text-slate-500/20 group-hover:text-slate-500 transition-colors"
-            />
-          </div>
-          <Transition v-bind="metricSwitchTransitionProps">
-            <div
-              :key="`speed-up-${summaryTransitionKey}`" class="flex items-baseline gap-1"
-              :style="getMetricSwitchStyle(4)"
-            >
-              <span class="text-md md:text-2xl font-bold leading-none tracking-tight">{{ formattedSpeedUp.value
-              }}</span>
-              <span class="text-[11px] md:text-xs font-medium text-muted-foreground">{{ formattedSpeedUp.unit }}</span>
+        <!-- 剩余价值 -->
+        <div
+          v-else-if="cardType === 'finance'"
+          class="relative w-full h-full"
+          :class="getCardPositionClass(idx)"
+        >
+          <CardX
+            hoverable
+            class="group h-full backdrop-blur-xl backdrop-saturate-150 bg-background/40 border-none hover:bg-background/60 ring-1 ring-foreground/[0.06] shadow-sm rounded-lg transition-all glass-hover-blur"
+            content-class="h-full !p-3" @click="openFinanceCard = !openFinanceCard"
+          >
+            <div class="flex h-full flex-col justify-between gap-1">
+              <div class="flex items-start justify-between">
+                <span class="text-xs font-medium tracking-wider text-muted-foreground">剩余价值</span>
+                <Icon
+                  icon="tabler:cash" :width="20" :height="20"
+                  class="text-slate-500/20 group-hover:text-slate-500 transition-colors"
+                />
+              </div>
+              <Transition v-bind="metricSwitchTransitionProps">
+                <div
+                  :key="`remaining-value-${summaryTransitionKey}`"
+                  class="flex items-baseline gap-1 min-w-0"
+                  :style="getMetricSwitchStyle(idx)"
+                >
+                  <span class="text-md md:text-2xl font-bold leading-none tracking-tight">
+                    {{ formattedRemainingValue.symbol }}{{ formattedRemainingValue.value }}
+                  </span>
+                  <span class="block cursor-help truncate text-[11px] md:text-xs font-medium text-muted-foreground">
+                    {{ formattedRemainingValue.currency }}
+                  </span>
+                </div>
+              </Transition>
             </div>
-          </Transition>
-        </div>
-      </CardX>
-      <CardX
-        hoverable
-        class="group backdrop-blur-xl backdrop-saturate-150 bg-background/40 border-none hover:bg-background/60 ring-1 ring-foreground/[0.06] shadow-sm rounded-lg transition-all glass-hover-blur"
-        :class="showEarth ? 'col-span-4 row-span-1 col-start-9 row-start-2' : 'col-span-1 min-h-18 md:min-h-28'"
-        content-class="h-full !p-3"
-      >
-        <div class="flex h-full flex-col justify-between gap-1">
-          <div class="flex items-start justify-between">
-            <span class="text-xs font-medium tracking-wider text-muted-foreground">实时下行</span>
-            <Icon
-              icon="tabler:chevrons-down" :width="20" :height="20"
-              class="text-slate-500/20 group-hover:text-slate-500 transition-colors"
-            />
-          </div>
-          <Transition v-bind="metricSwitchTransitionProps">
-            <div
-              :key="`speed-down-${summaryTransitionKey}`" class="flex items-baseline gap-1"
-              :style="getMetricSwitchStyle(5)"
-            >
-              <span class="text-md md:text-2xl font-bold leading-none tracking-tight">
-                {{ formattedSpeedDown.value }}
-              </span>
-              <span class="text-[11px] md:text-xs font-medium text-muted-foreground">{{ formattedSpeedDown.unit
-              }}</span>
+          </CardX>
+          <CardX
+            hoverable
+            class="absolute top-0 left-1/2 -translate-x-[50%] -translate-y-[25%] z-20 w-[260%] max-w-88 h-42 group bg-background/40 rounded-lg shadow-xl border-none backdrop-blur-xl backdrop-saturate-150 ring-1 ring-foreground/[0.06] transition-all"
+            :class="openFinanceCard ? 'opacity-100 scale-100  -translate-y-[5%]' : 'opacity-0 pointer-events-none scale-50'"
+            content-class="h-full !p-4" @click="openFinanceCard = false"
+          >
+            <div class="flex h-full min-w-0 flex-col overflow-x-hidden overflow-y-auto">
+              <div class="shrink-0 grid grid-cols-3 gap-1">
+                <div v-for="item in financeSummaryItems" :key="item.label" class="min-w-0">
+                  <div class="flex items-center text-xs font-medium text-muted-foreground">
+                    {{ item.label }}
+                  </div>
+                  <div class="flex min-w-0 mt-1 items-baseline truncate">
+                    <span class="shrink-0 text-xs mr-0.5 font-semibold leading-none text-muted-foreground">
+                      {{ item.symbol }}
+                    </span>
+                    <span class=" text-sm md:text-lg font-bold leading-none tracking-tight">
+                      {{ item.value }}
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <div class="flex-1" />
+              <div class="shrink-0 flex flex-col flex-1">
+                <div class="flex mb-1 items-center justify-between gap-2">
+                  <div class="flex items-center gap-1 text-xs font-medium tracking-wider text-muted-foreground">
+                    今日汇率
+                  </div>
+                  <select
+                    :value="exchangeRateBaseCurrency"
+                    class="shrink-0 rounded-sm border border-border/70 bg-background/70 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground outline-none transition-colors hover:text-foreground focus:text-foreground"
+                    aria-label="切换汇率基准币种" @click.stop @change.stop="setExchangeRateBaseCurrency"
+                  >
+                    <option v-for="currency in financeRateCurrencies" :key="currency" :value="currency">
+                      {{ currency }}
+                    </option>
+                  </select>
+                </div>
+                <div class="flex-1" />
+                <div class="grid grid-cols-2 gap-y-1 gap-x-4">
+                  <div
+                    v-for="row in exchangeRateRows" :key="row.currency"
+                    class="text-[11px] flex items-center justify-between"
+                  >
+                    <span class="text-muted-foreground">
+                      {{ row.currency }}
+                    </span>
+                    <span>
+                      {{ row.targetSymbol }}{{ row.rate }}
+                    </span>
+                  </div>
+                </div>
+              </div>
             </div>
-          </Transition>
+          </CardX>
         </div>
-      </CardX>
+
+        <!-- 累计流量 -->
+        <CardX
+          v-else-if="cardType === 'traffic'"
+          hoverable
+          class="group backdrop-blur-xl backdrop-saturate-150 bg-background/40 border-none hover:bg-background/60 ring-1 ring-foreground/[0.06] shadow-sm rounded-lg transition-all glass-hover-blur"
+          :class="getCardPositionClass(idx)"
+          content-class="h-full !p-3"
+        >
+          <div class="flex h-full flex-col justify-between gap-1">
+            <div class="flex items-start justify-between">
+              <span class="text-xs font-medium tracking-wider text-muted-foreground">累计流量</span>
+              <Icon
+                icon="tabler:download" :width="20" :height="20"
+                class="text-slate-500/20 group-hover:text-slate-500 transition-colors"
+              />
+            </div>
+            <DataTooltip
+              as="span" placement="top"
+              :content="`↑ ${formattedTrafficUp.value} ${formattedTrafficUp.unit}\n↓ ${formattedTrafficDown.value} ${formattedTrafficDown.unit}`"
+              class="min-w-0" content-class="whitespace-pre px-2 py-1 left-0 -translate-x-0 leading-normal"
+            >
+              <Transition v-bind="metricSwitchTransitionProps">
+                <div
+                  :key="`traffic-${summaryTransitionKey}`" class="flex items-baseline gap-1"
+                  :style="getMetricSwitchStyle(idx)"
+                >
+                  <span class="inline-block text-md md:text-2xl font-bold leading-none tracking-tight">
+                    {{ totalTrafficTooltip.value }}
+                  </span>
+                  <span class="inline-block text-[11px] md:text-xs font-medium text-muted-foreground">
+                    {{ totalTrafficTooltip.unit }}
+                  </span>
+                </div>
+              </Transition>
+            </DataTooltip>
+          </div>
+        </CardX>
+
+        <!-- 实时上行 -->
+        <CardX
+          v-else-if="cardType === 'speedUp'"
+          hoverable
+          class="group backdrop-blur-xl backdrop-saturate-150 bg-background/40 border-none hover:bg-background/60 ring-1 ring-foreground/[0.06] shadow-sm rounded-lg transition-all glass-hover-blur"
+          :class="getCardPositionClass(idx)"
+          content-class="h-full !p-3"
+        >
+          <div class="flex h-full flex-col justify-between gap-1">
+            <div class="flex items-start justify-between">
+              <span class="text-xs font-medium tracking-wider text-muted-foreground">实时上行</span>
+              <Icon
+                icon="tabler:chevrons-up" :width="20" :height="20"
+                class="text-slate-500/20 group-hover:text-slate-500 transition-colors"
+              />
+            </div>
+            <Transition v-bind="metricSwitchTransitionProps">
+              <div
+                :key="`speed-up-${summaryTransitionKey}`" class="flex items-baseline gap-1"
+                :style="getMetricSwitchStyle(idx)"
+              >
+                <span class="text-md md:text-2xl font-bold leading-none tracking-tight">{{ formattedSpeedUp.value
+                }}</span>
+                <span class="text-[11px] md:text-xs font-medium text-muted-foreground">{{ formattedSpeedUp.unit }}</span>
+              </div>
+            </Transition>
+          </div>
+        </CardX>
+
+        <!-- 实时下行 -->
+        <CardX
+          v-else-if="cardType === 'speedDown'"
+          hoverable
+          class="group backdrop-blur-xl backdrop-saturate-150 bg-background/40 border-none hover:bg-background/60 ring-1 ring-foreground/[0.06] shadow-sm rounded-lg transition-all glass-hover-blur"
+          :class="getCardPositionClass(idx)"
+          content-class="h-full !p-3"
+        >
+          <div class="flex h-full flex-col justify-between gap-1">
+            <div class="flex items-start justify-between">
+              <span class="text-xs font-medium tracking-wider text-muted-foreground">实时下行</span>
+              <Icon
+                icon="tabler:chevrons-down" :width="20" :height="20"
+                class="text-slate-500/20 group-hover:text-slate-500 transition-colors"
+              />
+            </div>
+            <Transition v-bind="metricSwitchTransitionProps">
+              <div
+                :key="`speed-down-${summaryTransitionKey}`" class="flex items-baseline gap-1"
+                :style="getMetricSwitchStyle(idx)"
+              >
+                <span class="text-md md:text-2xl font-bold leading-none tracking-tight">
+                  {{ formattedSpeedDown.value }}
+                </span>
+                <span class="text-[11px] md:text-xs font-medium text-muted-foreground">{{ formattedSpeedDown.unit
+                }}</span>
+              </div>
+            </Transition>
+          </div>
+        </CardX>
+
+        <!-- 连接数 -->
+        <CardX
+          v-else-if="cardType === 'connections'"
+          hoverable
+          class="group backdrop-blur-xl backdrop-saturate-150 bg-background/40 border-none hover:bg-background/60 ring-1 ring-foreground/[0.06] shadow-sm rounded-lg transition-all glass-hover-blur"
+          :class="getCardPositionClass(idx)"
+          content-class="h-full !p-3"
+        >
+          <div class="flex h-full flex-col justify-between gap-1">
+            <div class="flex items-start justify-between">
+              <span class="text-xs font-medium tracking-wider text-muted-foreground">连接数</span>
+              <Icon
+                icon="tabler:network" :width="20" :height="20"
+                class="text-slate-500/20 group-hover:text-slate-500 transition-colors"
+              />
+            </div>
+            <DataTooltip
+              as="span" placement="top"
+              :content="`TCP: ${totalConnections.tcp.toLocaleString('zh-CN')}\nUDP: ${totalConnections.udp.toLocaleString('zh-CN')}`"
+              class="min-w-0" content-class="whitespace-pre px-2 py-1 left-0 -translate-x-0 leading-normal"
+            >
+              <Transition v-bind="metricSwitchTransitionProps">
+                <div
+                  :key="`connections-${summaryTransitionKey}`" class="flex items-baseline gap-1"
+                  :style="getMetricSwitchStyle(idx)"
+                >
+                  <span class="text-md md:text-2xl font-bold leading-none tracking-tight">
+                    {{ formatNumber(totalConnections.total) }}
+                  </span>
+                  <span class="text-[11px] md:text-xs font-medium text-muted-foreground">TCP+UDP</span>
+                </div>
+              </Transition>
+            </DataTooltip>
+          </div>
+        </CardX>
+      </template>
     </div>
   </div>
 </template>
