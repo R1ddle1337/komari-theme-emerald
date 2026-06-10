@@ -275,15 +275,15 @@ function hasRegion(region: string | null | undefined): boolean {
               </span>
             </div>
           </div>
-          <!-- 运行时长 -->
-          <!-- <div
+          <!-- 在线时长 -->
+          <div
+            v-if="appStore.showNodeUptime"
             class="col-span-6 flex flex-row gap-2 items-center p-1 rounded-sm bg-slate-500/5 justify-center text-[11px] text-muted-foreground"
             :class="[!props.node.online ? 'blur-xs opacity-60' : '']"
           >
-            <span class="inline-flex flex-row gap-1 items-center">
-              {{ formatUptime(props.node.uptime ?? 0) }}
-            </span>
-          </div> -->
+            <Icon icon="tabler:clock-hour-4" width="12" height="12" />
+            <span>{{ formatUptime(props.node.uptime ?? 0) }}</span>
+          </div>
           <!-- 延迟 -->
           <div
             class="group/panel relative col-span-3 flex flex-col gap-1.5 p-1.5 h-10 rounded-sm bg-slate-500/5"

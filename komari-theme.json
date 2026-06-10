@@ -102,6 +102,13 @@
         "help": "在节点卡片上显示 TCP/UDP 连接数"
       },
       {
+        "key": "showNodeUptime",
+        "name": "显示在线时长",
+        "type": "switch",
+        "default": true,
+        "help": "在节点卡片上显示服务器在线时长"
+      },
+      {
         "key": "visitorInfoCardEnabled",
         "name": "访客信息卡片",
         "type": "switch",

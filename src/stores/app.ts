@@ -164,6 +164,14 @@ const useAppStore = defineStore('app', () => {
     return true
   })
 
+  const showNodeUptime = computed<boolean>(() => {
+    const settings = publicSettings.value?.theme_settings
+    if (settings && typeof settings.showNodeUptime === 'boolean') {
+      return settings.showNodeUptime
+    }
+    return true
+  })
+
   const visitorInfoCardEnabled = computed<boolean>(() => {
     const settings = publicSettings.value?.theme_settings
     if (settings && typeof settings.visitorInfoCardEnabled === 'boolean') {
@@ -379,6 +387,7 @@ const useAppStore = defineStore('app', () => {
     hideGeneralCard,
     summaryCards,
     showNodeConnections,
+    showNodeUptime,
     visitorInfoCardEnabled,
     hideAdminEntryWhenLoggedOut,
     disablePageAnimation,
