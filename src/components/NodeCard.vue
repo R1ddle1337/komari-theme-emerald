@@ -220,8 +220,8 @@ function hasRegion(region: string | null | undefined): boolean {
             </div>
           </div>
           <div
-            class="flex flex-col gap-0.5 p-1 pl-2 rounded-sm bg-slate-500/5"
-            :class="[priceTags.length ? 'col-span-2' : 'col-span-3', !props.node.online ? 'blur-xs opacity-60' : '']"
+            class="flex flex-col gap-0.5 p-1 pl-2 rounded-sm bg-slate-500/5 col-span-2"
+            :class="[!props.node.online ? 'blur-xs opacity-60' : '']"
           >
             <div class="text-[11px] flex flex-col">
               <div class="text-green-600 flex flex-row items-center gap-1">
@@ -235,8 +235,8 @@ function hasRegion(region: string | null | undefined): boolean {
             </div>
           </div>
           <div
-            class="flex flex-col gap-0.5 p-1 pl-2 rounded-sm bg-slate-500/5"
-            :class="[priceTags.length ? 'col-span-2' : 'col-span-3', !props.node.online ? 'blur-xs opacity-60' : '']"
+            class="flex flex-col gap-0.5 p-1 pl-2 rounded-sm bg-slate-500/5 col-span-2"
+            :class="[!props.node.online ? 'blur-xs opacity-60' : '']"
           >
             <div class="text-[11px] text-muted-foreground flex flex-col">
               <div class="flex flex-row items-center gap-1">
@@ -250,13 +250,28 @@ function hasRegion(region: string | null | undefined): boolean {
             </div>
           </div>
           <div
-            v-if="priceTags.length" class="col-span-2 flex flex-col gap-0.5 p-1 pl-2 rounded-sm bg-slate-500/5"
+            class="flex flex-col gap-0.5 p-1 pl-2 rounded-sm bg-slate-500/5 col-span-2"
             :class="[!props.node.online ? 'blur-xs opacity-60' : '']"
           >
             <div class="text-[11px] text-muted-foreground flex flex-col">
-              <div v-for="(tag, index) in priceTags" :key="index" class="flex flex-row items-center gap-1">
-                {{ tag }}
+              <div class="flex flex-row items-center gap-1">
+                <span class="text-[10px] font-medium text-muted-foreground/70">TCP</span>
+                {{ (props.node.connections ?? 0).toLocaleString() }}
               </div>
+              <div class="flex flex-row items-center gap-1">
+                <span class="text-[10px] font-medium text-muted-foreground/70">UDP</span>
+                {{ (props.node.connections_udp ?? 0).toLocaleString() }}
+              </div>
+            </div>
+          </div>
+          <div
+            v-if="priceTags.length" class="col-span-6 flex flex-row gap-0.5 p-1 pl-2 rounded-sm bg-slate-500/5 justify-center"
+            :class="[!props.node.online ? 'blur-xs opacity-60' : '']"
+          >
+            <div class="text-[11px] text-muted-foreground flex flex-row gap-3">
+              <span v-for="(tag, index) in priceTags" :key="index">
+                {{ tag }}
+              </span>
             </div>
           </div>
           <!-- 运行时长 -->
