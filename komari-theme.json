@@ -2,7 +2,7 @@
   "name": "Komari Emerald",
   "short": "Emerald",
   "description": "An emerald theme for Komari",
-  "version": "1.16.0",
+  "version": "1.17.0",
   "author": "Riddle & Tokinx",
   "url": "https://github.com/R1ddle1337/komari-theme-emerald",
   "preview": "preview.png",
@@ -93,6 +93,13 @@
         "type": "string",
         "default": "memory,disk,finance,traffic,speedUp,speedDown",
         "help": "自定义显示哪 6 个总览卡片，可选：memory(内存), disk(硬盘), finance(剩余价值), traffic(累计流量), speedUp(实时上行), speedDown(实时下行), connections(连接数)。用英文逗号分隔，选择 6 个"
+      },
+      {
+        "key": "showNodeConnections",
+        "name": "显示节点连接数",
+        "type": "switch",
+        "default": true,
+        "help": "在节点卡片上显示 TCP/UDP 连接数"
       },
       {
         "key": "visitorInfoCardEnabled",

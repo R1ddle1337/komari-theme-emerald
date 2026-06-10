@@ -235,8 +235,8 @@ function hasRegion(region: string | null | undefined): boolean {
             </div>
           </div>
           <div
-            class="flex flex-col gap-0.5 p-1 pl-2 rounded-sm bg-slate-500/5 col-span-2"
-            :class="[!props.node.online ? 'blur-xs opacity-60' : '']"
+            class="flex flex-col gap-0.5 p-1 pl-2 rounded-sm bg-slate-500/5"
+            :class="[appStore.showNodeConnections ? 'col-span-2' : 'col-span-4', !props.node.online ? 'blur-xs opacity-60' : '']"
           >
             <div class="text-[11px] text-muted-foreground flex flex-col">
               <div class="flex flex-row items-center gap-1">
@@ -250,6 +250,7 @@ function hasRegion(region: string | null | undefined): boolean {
             </div>
           </div>
           <div
+            v-if="appStore.showNodeConnections"
             class="flex flex-col gap-0.5 p-1 pl-2 rounded-sm bg-slate-500/5 col-span-2"
             :class="[!props.node.online ? 'blur-xs opacity-60' : '']"
           >

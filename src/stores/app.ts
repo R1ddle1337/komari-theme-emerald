@@ -156,6 +156,14 @@ const useAppStore = defineStore('app', () => {
     return DEFAULT_SUMMARY_CARDS
   })
 
+  const showNodeConnections = computed<boolean>(() => {
+    const settings = publicSettings.value?.theme_settings
+    if (settings && typeof settings.showNodeConnections === 'boolean') {
+      return settings.showNodeConnections
+    }
+    return true
+  })
+
   const visitorInfoCardEnabled = computed<boolean>(() => {
     const settings = publicSettings.value?.theme_settings
     if (settings && typeof settings.visitorInfoCardEnabled === 'boolean') {
@@ -370,6 +378,7 @@ const useAppStore = defineStore('app', () => {
     hideEarth,
     hideGeneralCard,
     summaryCards,
+    showNodeConnections,
     visitorInfoCardEnabled,
     hideAdminEntryWhenLoggedOut,
     disablePageAnimation,

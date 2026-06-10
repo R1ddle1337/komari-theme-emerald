@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { ShaderType } from '@/stores/app'
 import { Icon } from '@iconify/vue'
 import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
@@ -6,7 +7,6 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { useAppStore } from '@/stores/app'
-import type { ShaderType } from '@/stores/app'
 
 const router = useRouter()
 const appStore = useAppStore()
@@ -24,7 +24,8 @@ const menuRef = ref<HTMLElement>()
 const menuPosition = ref({ top: '0px', right: '0px' })
 
 function updateMenuPosition() {
-  if (!triggerRef.value) return
+  if (!triggerRef.value)
+    return
   const rect = triggerRef.value.getBoundingClientRect()
   menuPosition.value = {
     top: `${rect.bottom + 8}px`,
@@ -51,11 +52,14 @@ function selectShader(value: ShaderType) {
 }
 
 function handleClickOutside(e: MouseEvent) {
-  if (!showShaderMenu.value) return
+  if (!showShaderMenu.value)
+    return
   const target = e.target as HTMLElement
   // 如果点击的是菜单本体或触发按钮，不关闭
-  if (target.closest('.shader-menu-container')) return
-  if (target.closest('.shader-menu-dropdown')) return
+  if (target.closest('.shader-menu-container'))
+    return
+  if (target.closest('.shader-menu-dropdown'))
+    return
   showShaderMenu.value = false
 }
 
