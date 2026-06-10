@@ -307,7 +307,7 @@ function initWebGL() {
   if (!gl)
     return false
 
-  // Mobile: 50 iterations; Desktop: 100 iterations
+  // Mobile: 50 iterations; Desktop: 150 iterations
   const maxIter = isMobile ? 50 : 150
   const vs = createShader(gl, gl.VERTEX_SHADER, VERTEX_SHADER)
   const fs = createShader(gl, gl.FRAGMENT_SHADER, getFragmentShader(maxIter))
