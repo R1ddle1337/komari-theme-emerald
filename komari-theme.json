@@ -95,6 +95,13 @@
         "help": "自定义显示哪 6 个总览卡片，可选：memory(内存), disk(硬盘), finance(剩余价值), traffic(累计流量), speedUp(实时上行), speedDown(实时下行), connections(连接数)。用英文逗号分隔，选择 6 个"
       },
       {
+        "key": "nodeCardMinWidth",
+        "name": "节点卡片最小宽度",
+        "type": "number",
+        "default": 300,
+        "help": "节点卡片的最小宽度（单位：px），数值越大卡片越宽，默认 300"
+      },
+      {
         "key": "showNodeConnections",
         "name": "显示节点连接数",
         "type": "switch",

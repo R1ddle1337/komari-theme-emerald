@@ -156,6 +156,14 @@ const useAppStore = defineStore('app', () => {
     return DEFAULT_SUMMARY_CARDS
   })
 
+  const nodeCardMinWidth = computed<number>(() => {
+    const settings = publicSettings.value?.theme_settings
+    if (settings && typeof settings.nodeCardMinWidth === 'number' && settings.nodeCardMinWidth >= 200) {
+      return settings.nodeCardMinWidth
+    }
+    return 300
+  })
+
   const showNodeConnections = computed<boolean>(() => {
     const settings = publicSettings.value?.theme_settings
     if (settings && typeof settings.showNodeConnections === 'boolean') {
@@ -386,6 +394,7 @@ const useAppStore = defineStore('app', () => {
     hideEarth,
     hideGeneralCard,
     summaryCards,
+    nodeCardMinWidth,
     showNodeConnections,
     showNodeUptime,
     visitorInfoCardEnabled,
