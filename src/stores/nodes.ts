@@ -282,16 +282,22 @@ const useNodesStore = defineStore('nodes', () => {
   }
 
   /**
-   * 按 weight 升序排序节点（weight 越小越靠前）
+   * 排序节点：离线节点沉底，同状态内按 weight 升序
    */
   function sortNodesByWeight(): void {
-    nodes.value.sort((a, b) => a.weight - b.weight)
+    nodes.value.sort((a, b) => {
+      // 离线节点排到最后
+      if (a.online !== b.online) return a.online ? -1 : 1
+      // 同状态按 weight 升序
+      return a.weight - b.weight
+    })
   }
 
   /**
    * 更新节点状态（实时更新）
    */
   function updateNodeStatuses(statuses: Record<string, NodeStatus>): void {
+    let onlineChanged = false
     Object.entries(statuses).forEach(([uuid, status]) => {
       const index = nodes.value.findIndex(n => n.uuid === uuid)
       if (index === -1)
@@ -301,8 +307,14 @@ const useNodesStore = defineStore('nodes', () => {
       if (!node)
         return
 
+      if (node.online !== status.online)
+        onlineChanged = true
+
       nodes.value[index] = updateNodeStatus(node, extractStatusData(status))
     })
+    // 节点上/下线时重新排序
+    if (onlineChanged)
+      sortNodesByWeight()
   }
 
   /**
