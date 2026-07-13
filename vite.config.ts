@@ -105,11 +105,17 @@ export default defineConfig({
     chunkSizeWarningLimit: 600,
     rollupOptions: {
       output: {
-        manualChunks: {
-          'vue-vendor': ['vue', 'vue-router', 'pinia'],
-          'echarts': ['echarts', 'vue-echarts'],
-          'reka-ui': ['reka-ui'],
-          'vueuse': ['@vueuse/core'],
+        // 用函数形式按模块路径归组：对象形式的 ['echarts'] 会把完整 echarts
+        // 主入口强制打进 chunk（即使代码只用了 echarts/core 的按需注册）
+        manualChunks(id: string) {
+          if (id.includes('node_modules/echarts') || id.includes('node_modules/vue-echarts') || id.includes('node_modules/zrender'))
+            return 'echarts'
+          if (id.includes('node_modules/@vue/') || id.includes('node_modules/vue-router') || id.includes('node_modules/pinia') || id.includes('node_modules/vue/'))
+            return 'vue-vendor'
+          if (id.includes('node_modules/reka-ui'))
+            return 'reka-ui'
+          if (id.includes('node_modules/@vueuse/'))
+            return 'vueuse'
         },
       },
     },

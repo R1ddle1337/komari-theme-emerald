@@ -148,9 +148,12 @@ const isRealtime = computed(() => selectedView.value === '实时')
 
 // 数据状态
 const remoteData = shallowRef<StatusRecord[]>([])
+// 历史模式下 metric store 返回的数据（服务端已降采样，优先于 remoteData 使用）
+const metricData = shallowRef<RecordFormat[] | null>(null)
 const loading = ref(false)
 const isInitialLoad = ref(true) // 是否为首次加载（用于控制实时模式下的 NSpin 显示）
 const error = ref<string | null>(null)
+let fetchRequestId = 0
 
 // 节点信息
 const nodeInfo = computed(() => nodesStore.nodesByUuid.get(props.uuid))
@@ -159,6 +162,107 @@ const nodeInfo = computed(() => nodesStore.nodesByUuid.get(props.uuid))
 const rpc = getSharedRpc()
 
 // ==================== 数据获取 ====================
+
+// Komari 1.2.5+ metric store 返回的序列（服务端降采样）
+interface MetricPoint {
+  time: string
+  value: number | null
+}
+
+interface MetricSeries {
+  metric_key: string
+  tags?: Record<string, string>
+  tag?: Record<string, string>
+  points: MetricPoint[]
+}
+
+interface MetricQueryResponse {
+  series: MetricSeries[]
+}
+
+/** 历史图表需要的 metric key 及其对应的记录字段 */
+const LOAD_METRIC_FIELDS: Record<string, keyof RecordFormat> = {
+  'cpu.usage': 'cpu',
+  'gpu.usage': 'gpu',
+  'load.average': 'load',
+  'memory.used': 'ram',
+  'swap.used': 'swap',
+  'temperature': 'temp',
+  'disk.used': 'disk',
+  'net.in.rate': 'net_in',
+  'net.out.rate': 'net_out',
+  'net.total.up': 'net_total_up',
+  'net.total.down': 'net_total_down',
+  'process.count': 'process',
+  'connections.tcp': 'connections',
+  'connections.udp': 'connections_udp',
+}
+
+/** 将 metric 序列按时间聚合为图表记录行 */
+function metricSeriesToRecords(seriesList: MetricSeries[]): RecordFormat[] {
+  const rows = new Map<string, RecordFormat>()
+  const node = nodeInfo.value
+
+  const getRow = (time: string): RecordFormat => {
+    const existing = rows.get(time)
+    if (existing)
+      return existing
+    const row: RecordFormat = {
+      client: props.uuid,
+      time,
+      cpu: null,
+      gpu: null,
+      gpu_usage: null,
+      gpu_memory: null,
+      ram: null,
+      ram_total: node?.mem_total ?? null,
+      swap: null,
+      swap_total: node?.swap_total ?? null,
+      load: null,
+      temp: null,
+      disk: null,
+      disk_total: node?.disk_total ?? null,
+      net_in: null,
+      net_out: null,
+      net_total_up: null,
+      net_total_down: null,
+      process: null,
+      connections: null,
+      connections_udp: null,
+    }
+    rows.set(time, row)
+    return row
+  }
+
+  for (const series of seriesList) {
+    const field = LOAD_METRIC_FIELDS[series.metric_key]
+    if (!field)
+      continue
+    for (const point of series.points ?? []) {
+      const row = getRow(point.time)
+      ;(row[field] as number | null) = point.value
+    }
+  }
+
+  const result = Array.from(rows.values())
+  result.sort((a, b) => dayjs(a.time).valueOf() - dayjs(b.time).valueOf())
+  return result
+}
+
+/** 优先从 metric store 获取历史数据（服务端降采样），不可用时返回 null 走旧接口 */
+async function fetchHistoryFromMetrics(hours: number): Promise<RecordFormat[] | null> {
+  const result = await rpc.getClient().call<MetricQueryResponse>('public:queryMetrics', {
+    metric_keys: Object.keys(LOAD_METRIC_FIELDS),
+    entity_id: props.uuid,
+    hours,
+    downsample: true,
+    max_points: 500,
+    aggregation: 'avg',
+  })
+
+  const records = metricSeriesToRecords(result?.series ?? [])
+  return records.length ? records : null
+}
 
 function statusToRecordFormat(records: StatusRecord[]): RecordFormat[] {
   return records.map(r => ({
@@ -190,6 +294,8 @@ async function fetchRecentData() {
   if (!props.uuid)
     return
 
+  const requestId = ++fetchRequestId
+
   // 只在首次加载时显示 loading
   if (isInitialLoad.value) {
     loading.value = true
@@ -198,18 +304,25 @@ async function fetchRecentData() {
 
   try {
     const result = await rpc.getNodeRecentStatus(props.uuid)
+    if (requestId !== fetchRequestId)
+      return
     const records = result?.records || []
     records.sort((a, b) => dayjs(a.time).valueOf() - dayjs(b.time).valueOf())
     const maxLength = 150
+    metricData.value = null
     remoteData.value = records.slice(-maxLength)
   }
   catch (err) {
+    if (requestId !== fetchRequestId)
+      return
     error.value = err instanceof Error ? err.message : '获取数据失败'
     remoteData.value = []
   }
   finally {
-    loading.value = false
-    isInitialLoad.value = false
+    if (requestId === fetchRequestId) {
+      loading.value = false
+      isInitialLoad.value = false
+    }
   }
 }
 
@@ -217,10 +330,30 @@ async function fetchHistoryData() {
   if (!props.uuid)
     return
 
+  const requestId = ++fetchRequestId
   const hours = selectedHours.value || 4
 
   loading.value = true
   error.value = null
+
+  // 优先走 metric store（Komari 1.2.5+，服务端降采样，传输量小一个量级）
+  try {
+    const records = await fetchHistoryFromMetrics(hours)
+    if (requestId !== fetchRequestId)
+      return
+    if (records) {
+      metricData.value = records
+      remoteData.value = []
+      loading.value = false
+      return
+    }
+  }
+  catch {
+    // 旧版后端没有 public:queryMetrics，回落到旧接口
+  }
+
+  if (requestId !== fetchRequestId)
+    return
 
   try {
     const apiBase = import.meta.env.VITE_API_BASE
@@ -231,6 +364,8 @@ async function fetchHistoryData() {
     }
 
     const resp = await response.json()
+    if (requestId !== fetchRequestId)
+      return
     const records = resp.data?.records || []
 
     // 按时间排序
@@ -238,14 +373,19 @@ async function fetchHistoryData() {
       dayjs(a.time).valueOf() - dayjs(b.time).valueOf(),
     )
 
+    metricData.value = null
     remoteData.value = records
   }
   catch (err) {
+    if (requestId !== fetchRequestId)
+      return
     error.value = err instanceof Error ? err.message : '获取数据失败'
     remoteData.value = []
   }
   finally {
-    loading.value = false
+    if (requestId === fetchRequestId) {
+      loading.value = false
+    }
   }
 }
 
@@ -261,6 +401,10 @@ async function fetchData() {
 // ==================== 数据处理 ====================
 
 const chartData = computed(() => {
+  // metric store 数据已由服务端降采样对齐，直接使用
+  if (metricData.value)
+    return metricData.value
+
   const data = statusToRecordFormat(remoteData.value)
   if (!data.length)
     return []
@@ -291,11 +435,12 @@ const chartData = computed(() => {
   return fillMissingTimePoints(data, intervalSec, hours * 3600, maxGap)
 })
 
-const latestStatus = computed(() => {
+const latestStatus = computed<StatusRecord | RecordFormat | null>(() => {
   const data = remoteData.value
-  if (!data.length)
-    return null
-  return data.at(-1) ?? null
+  if (data.length)
+    return data.at(-1) ?? null
+  // 历史模式走 metric store 时，卡片头部数值取最后一个采样点
+  return metricData.value?.at(-1) ?? null
 })
 
 // ==================== 工具函数 ====================
@@ -857,7 +1002,7 @@ onMounted(() => {
       <div v-if="error" class="text-red-500 py-8 text-center">
         {{ error }}
       </div>
-      <div v-else-if="remoteData.length === 0 && !loading" class="py-8">
+      <div v-else-if="chartData.length === 0 && !loading" class="py-8">
         <Empty description="暂无负载数据" />
       </div>
 
