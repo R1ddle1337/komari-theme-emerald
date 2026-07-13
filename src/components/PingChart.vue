@@ -324,8 +324,6 @@ const mergedData = computed(() => {
   if (!data.length)
     return []
 
-  const taskList = tasks.value
-
   const toleranceMs = mergeToleranceMs.value
 
   const grouped: Map<number, Record<string, unknown>> = new Map()
