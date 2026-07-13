@@ -88,11 +88,52 @@ interface StatusData {
   uptime: number
 }
 
+/** Client 中与 NodeData 同名同型的字段（更新节点基本信息时按字段同步） */
+const CLIENT_SYNC_FIELDS = [
+  'name',
+  'cpu_name',
+  'virtualization',
+  'arch',
+  'cpu_cores',
+  'os',
+  'kernel_version',
+  'gpu_name',
+  'ipv4',
+  'ipv6',
+  'region',
+  'remark',
+  'public_remark',
+  'mem_total',
+  'swap_total',
+  'disk_total',
+  'version',
+  'weight',
+  'price',
+  'billing_cycle',
+  'auto_renewal',
+  'currency',
+  'expired_at',
+  'group',
+  'tags',
+  'hidden',
+  'traffic_limit',
+  'created_at',
+  'updated_at',
+] as const
+
+type ClientSyncField = (typeof CLIENT_SYNC_FIELDS)[number]
+
 const useNodesStore = defineStore('nodes', () => {
   // ===== 状态 =====
   const nodes = ref<NodeData[]>([])
   const wsConnectionState = ref<WsConnectionState>('disconnected')
   const wsReconnectAttempts = ref<number>(0)
+
+  /**
+   * 按 UUID 的直接索引，避免每次轮询对每个节点 findIndex（O(n²)）。
+   * 注意存放的必须是 push 进 nodes 后回读的响应式代理，存原始对象会丢失响应式。
+   */
+  const nodeIndex = new Map<string, NodeData>()
 
   // ===== 计算属性 =====
   /** 在线节点数量 */
@@ -120,6 +161,22 @@ const useNodesStore = defineStore('nodes', () => {
   })
 
   // ===== 方法 =====
+
+  /** 追加节点并登记索引 */
+  function addIndexedNode(node: NodeData): void {
+    nodes.value.push(node)
+    const reactiveNode = nodes.value.at(-1)
+    if (reactiveNode)
+      nodeIndex.set(reactiveNode.uuid, reactiveNode)
+  }
+
+  /** 删除指定下标的节点并清理索引 */
+  function removeNodeAt(index: number): void {
+    const node = nodes.value[index]
+    if (node)
+      nodeIndex.delete(node.uuid)
+    nodes.value.splice(index, 1)
+  }
 
   /**
    * 从 Client 对象创建节点数据
@@ -181,58 +238,67 @@ const useNodesStore = defineStore('nodes', () => {
   }
 
   /**
-   * 更新节点的状态数据
+   * 就地写入状态字段，仅在值实际变化时赋值。
+   *
+   * 关键：不要用 `{...node}` 生成新对象再整体替换数组元素——引用变化会让依赖该节点
+   * 的所有组件（NodeCard / 列表行 / 总览卡片 / 地球）每轮轮询都整体重渲染。就地按
+   * 字段更新后，Vue 的细粒度响应式只会重算真正变化的字段对应的视图。
    */
-  function updateNodeStatus(node: NodeData, status: StatusData): NodeData {
-    return {
-      ...node,
-      online: status.online,
-      time: status.time,
-      cpu: status.cpu,
-      gpu: status.gpu,
-      ram: status.ram,
-      swap: status.swap,
-      load: status.load,
-      load5: status.load5,
-      load15: status.load15,
-      temp: status.temp,
-      disk: status.disk,
-      net_in: status.net_in,
-      net_out: status.net_out,
-      net_total_up: status.net_total_up,
-      net_total_down: status.net_total_down,
-      process: status.process,
-      connections: status.connections,
-      connections_udp: status.connections_udp,
-      uptime: status.uptime,
-    }
+  function applyStatus(node: NodeData, status: StatusData): void {
+    if (node.online !== status.online)
+      node.online = status.online
+    if (node.time !== status.time)
+      node.time = status.time
+    if (node.cpu !== status.cpu)
+      node.cpu = status.cpu
+    if (node.gpu !== status.gpu)
+      node.gpu = status.gpu
+    if (node.ram !== status.ram)
+      node.ram = status.ram
+    if (node.swap !== status.swap)
+      node.swap = status.swap
+    if (node.load !== status.load)
+      node.load = status.load
+    if (node.load5 !== status.load5)
+      node.load5 = status.load5
+    if (node.load15 !== status.load15)
+      node.load15 = status.load15
+    if (node.temp !== status.temp)
+      node.temp = status.temp
+    if (node.disk !== status.disk)
+      node.disk = status.disk
+    if (node.net_in !== status.net_in)
+      node.net_in = status.net_in
+    if (node.net_out !== status.net_out)
+      node.net_out = status.net_out
+    if (node.net_total_up !== status.net_total_up)
+      node.net_total_up = status.net_total_up
+    if (node.net_total_down !== status.net_total_down)
+      node.net_total_down = status.net_total_down
+    if (node.process !== status.process)
+      node.process = status.process
+    if (node.connections !== status.connections)
+      node.connections = status.connections
+    if (node.connections_udp !== status.connections_udp)
+      node.connections_udp = status.connections_udp
+    if (node.uptime !== status.uptime)
+      node.uptime = status.uptime
   }
 
-  /**
-   * 从 NodeStatus 提取状态数据
-   */
-  function extractStatusData(status: NodeStatus): StatusData {
-    return {
-      online: status.online,
-      time: status.time,
-      cpu: status.cpu,
-      gpu: status.gpu,
-      ram: status.ram,
-      swap: status.swap,
-      load: status.load,
-      load5: status.load5,
-      load15: status.load15,
-      temp: status.temp,
-      disk: status.disk,
-      net_in: status.net_in,
-      net_out: status.net_out,
-      net_total_up: status.net_total_up,
-      net_total_down: status.net_total_down,
-      process: status.process,
-      connections: status.connections,
-      connections_udp: status.connections_udp,
-      uptime: status.uptime,
-    }
+  function syncClientField<K extends ClientSyncField>(node: NodeData, client: Client, key: K): void {
+    const next = client[key] as NodeData[K]
+    if (node[key] !== next)
+      node[key] = next
+  }
+
+  /** 就地同步节点基本信息，仅在值实际变化时赋值（保留状态字段不动） */
+  function applyClient(node: NodeData, client: Client): void {
+    for (const key of CLIENT_SYNC_FIELDS)
+      syncClientField(node, client, key)
+
+    const trafficLimitType = client.traffic_limit_type as TrafficLimitType
+    if (node.traffic_limit_type !== trafficLimitType)
+      node.traffic_limit_type = trafficLimitType
   }
 
   /**
@@ -240,7 +306,6 @@ const useNodesStore = defineStore('nodes', () => {
    */
   function initNodes(clients: Record<string, Client>, statuses: Record<string, NodeStatus>): void {
     const uuids = Object.keys(clients)
-    const existingUuids = new Set(nodes.value.map(n => n.uuid))
 
     // 更新现有节点或添加新节点
     uuids.forEach((uuid) => {
@@ -249,22 +314,18 @@ const useNodesStore = defineStore('nodes', () => {
         return
 
       const status = statuses[uuid]
-      const index = nodes.value.findIndex(n => n.uuid === uuid)
+      const existing = nodeIndex.get(uuid)
 
-      if (existingUuids.has(uuid) && index !== -1) {
-        // 更新现有节点
-        const baseNode = createNodeFromClient(client)
-        nodes.value[index] = status
-          ? updateNodeStatus(baseNode, extractStatusData(status))
-          : baseNode
+      if (existing) {
+        applyClient(existing, client)
+        if (status)
+          applyStatus(existing, status)
       }
       else {
-        // 添加新节点
-        const newNode = createNodeFromClient(client)
-        nodes.value.push(status
-          ? updateNodeStatus(newNode, extractStatusData(status))
-          : newNode,
-        )
+        addIndexedNode(createNodeFromClient(client))
+        const reactiveNode = nodeIndex.get(uuid)
+        if (status && reactiveNode)
+          applyStatus(reactiveNode, status)
       }
     })
 
@@ -273,7 +334,7 @@ const useNodesStore = defineStore('nodes', () => {
     for (let i = nodes.value.length - 1; i >= 0; i--) {
       const node = nodes.value[i]
       if (node && !newUuids.has(node.uuid)) {
-        nodes.value.splice(i, 1)
+        removeNodeAt(i)
       }
     }
 
@@ -287,7 +348,8 @@ const useNodesStore = defineStore('nodes', () => {
   function sortNodesByWeight(): void {
     nodes.value.sort((a, b) => {
       // 离线节点排到最后
-      if (a.online !== b.online) return a.online ? -1 : 1
+      if (a.online !== b.online)
+        return a.online ? -1 : 1
       // 同状态按 weight 升序
       return a.weight - b.weight
     })
@@ -299,18 +361,14 @@ const useNodesStore = defineStore('nodes', () => {
   function updateNodeStatuses(statuses: Record<string, NodeStatus>): void {
     let onlineChanged = false
     Object.entries(statuses).forEach(([uuid, status]) => {
-      const index = nodes.value.findIndex(n => n.uuid === uuid)
-      if (index === -1)
-        return
-
-      const node = nodes.value[index]
+      const node = nodeIndex.get(uuid)
       if (!node)
         return
 
       if (node.online !== status.online)
         onlineChanged = true
 
-      nodes.value[index] = updateNodeStatus(node, extractStatusData(status))
+      applyStatus(node, status)
     })
     // 节点上/下线时重新排序
     if (onlineChanged)
@@ -322,43 +380,22 @@ const useNodesStore = defineStore('nodes', () => {
    */
   function updateNodeClients(clients: Record<string, Client>): void {
     const newUuids = new Set(Object.keys(clients))
+    let orderChanged = false
 
     // 更新现有节点信息或添加新节点
     Object.entries(clients).forEach(([uuid, client]) => {
-      const index = nodes.value.findIndex(n => n.uuid === uuid)
+      const node = nodeIndex.get(uuid)
 
-      if (index !== -1) {
-        // 更新现有节点，保留状态信息
-        const currentNode = nodes.value[index]
-        if (!currentNode)
-          return
-
-        const baseNode = createNodeFromClient(client)
-        nodes.value[index] = updateNodeStatus(baseNode, {
-          online: currentNode.online,
-          time: currentNode.time,
-          cpu: currentNode.cpu,
-          gpu: currentNode.gpu,
-          ram: currentNode.ram,
-          swap: currentNode.swap,
-          load: currentNode.load,
-          load5: currentNode.load5,
-          load15: currentNode.load15,
-          temp: currentNode.temp,
-          disk: currentNode.disk,
-          net_in: currentNode.net_in,
-          net_out: currentNode.net_out,
-          net_total_up: currentNode.net_total_up,
-          net_total_down: currentNode.net_total_down,
-          process: currentNode.process,
-          connections: currentNode.connections,
-          connections_udp: currentNode.connections_udp,
-          uptime: currentNode.uptime,
-        })
+      if (node) {
+        if (node.weight !== client.weight)
+          orderChanged = true
+        // 就地同步基本信息，状态字段保持不变
+        applyClient(node, client)
       }
       else {
         // 添加新节点（不带状态）
-        nodes.value.push(createNodeFromClient(client))
+        addIndexedNode(createNodeFromClient(client))
+        orderChanged = true
       }
     })
 
@@ -366,12 +403,13 @@ const useNodesStore = defineStore('nodes', () => {
     for (let i = nodes.value.length - 1; i >= 0; i--) {
       const node = nodes.value[i]
       if (node && !newUuids.has(node.uuid)) {
-        nodes.value.splice(i, 1)
+        removeNodeAt(i)
       }
     }
 
-    // 按 weight 降序排序
-    sortNodesByWeight()
+    // 仅在排序依据可能变化时重排
+    if (orderChanged)
+      sortNodesByWeight()
   }
 
   /**
@@ -389,6 +427,7 @@ const useNodesStore = defineStore('nodes', () => {
    */
   function clearNodes(): void {
     nodes.value = []
+    nodeIndex.clear()
   }
 
   return {

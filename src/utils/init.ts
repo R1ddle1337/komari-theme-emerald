@@ -28,6 +28,9 @@ const DEFAULT_CONFIG: Required<InitConfig> = {
   postFailureThreshold: 3,
 }
 
+/** 节点基本信息（配置、价格、到期日等）变化很慢，低频刷新即可 */
+const CLIENTS_REFRESH_INTERVAL_MS = 60_000
+
 /** 初始化状态管理 */
 class InitManager {
   private config: Required<InitConfig>
@@ -37,6 +40,8 @@ class InitManager {
   private pollTimer: ReturnType<typeof setInterval> | null = null
   private isPolling = false
   private isInitialized = false
+  private lastClientsFetchedAt = 0
+  private onVisibilityChange: (() => void) | null = null
   private useWebSocket: boolean | null = null // 根据主题配置决定
   constructor(config: InitConfig = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config }
@@ -165,6 +170,7 @@ class InitManager {
 
       // 初始化节点数据
       this.nodesStore.initNodes(clientsResult, statusesResult)
+      this.lastClientsFetchedAt = Date.now()
     }
     catch (error) {
       console.error('[InitManager] Failed to fetch nodes data:', error)
@@ -312,6 +318,15 @@ class InitManager {
     this.pollTimer = setInterval(() => {
       this.poll()
     }, this.getPollInterval())
+
+    // 页面重新可见时立即补一次轮询（poll 在 document.hidden 时会跳过）
+    if (!this.onVisibilityChange) {
+      this.onVisibilityChange = () => {
+        if (!document.hidden)
+          this.poll()
+      }
+      document.addEventListener('visibilitychange', this.onVisibilityChange)
+    }
   }
 
   /**
@@ -322,21 +337,34 @@ class InitManager {
       return
     }
 
+    // 页面不可见时暂停轮询，回到前台由 visibilitychange 立即补一次
+    if (document.hidden) {
+      return
+    }
+
     this.isPolling = true
 
     try {
-      // 并行执行三个请求
-      const [, clientsResult, statusesResult] = await Promise.all([
+      // 状态每轮都拉；节点基本信息变化很慢，按 CLIENTS_REFRESH_INTERVAL_MS 低频刷新
+      const now = Date.now()
+      const shouldRefreshClients = now - this.lastClientsFetchedAt >= CLIENTS_REFRESH_INTERVAL_MS
+
+      const [, statusesResult, clientsResult] = await Promise.all([
         // 1. Ping 测试服务器状态
         this.rpc.ping(),
-        // 2. 获取节点信息
-        this.rpc.getNodes() as Promise<Record<string, Client>>,
-        // 3. 获取节点最新状态
+        // 2. 获取节点最新状态
         this.rpc.getNodesLatestStatus() as Promise<Record<string, NodeStatus>>,
+        // 3. 低频获取节点信息
+        shouldRefreshClients
+          ? this.rpc.getNodes() as Promise<Record<string, Client>>
+          : Promise.resolve(null),
       ])
 
-      // 更新节点信息（会智能合并，不会重建数组）
-      this.nodesStore.updateNodeClients(clientsResult)
+      // 更新节点信息（就地合并，不会重建数组）
+      if (clientsResult) {
+        this.nodesStore.updateNodeClients(clientsResult)
+        this.lastClientsFetchedAt = now
+      }
 
       // 更新节点状态
       this.nodesStore.updateNodeStatuses(statusesResult)
@@ -367,6 +395,10 @@ class InitManager {
     if (this.pollTimer) {
       clearInterval(this.pollTimer)
       this.pollTimer = null
+    }
+    if (this.onVisibilityChange) {
+      document.removeEventListener('visibilitychange', this.onVisibilityChange)
+      this.onVisibilityChange = null
     }
   }
 
