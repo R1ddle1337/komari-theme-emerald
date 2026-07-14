@@ -9,7 +9,7 @@ import {
   useRafFn,
 } from '@vueuse/core'
 import createGlobe from 'cobe'
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 import { useAppStore } from '@/stores/app'
 import { useNodesStore } from '@/stores/nodes'
 import { getCoordByCode, getCountryCodeFromRegion } from '@/utils/geoHelper'
@@ -86,12 +86,12 @@ function shouldKeepStaticRedraw(): boolean {
   return now < staticRedrawUntil
 }
 
-// 减少高采样导致的性能问题
+// 减少高采样导致的性能问题：按原生 DPR 渲染、上限 2。
+// 之前强制最低 1.5 会让 DPR=1 的显示器每帧多画 2.25 倍像素（同上游 87cc17a）
 function getCappedDpr(): number {
   if (typeof window === 'undefined')
-    return 1.5
-  const raw = window.devicePixelRatio || 1
-  return Math.min(Math.max(raw, 1.5), 2)
+    return 1
+  return Math.min(window.devicePixelRatio || 1, 2)
 }
 
 // 移动端降低 mapSamples 提升性能
@@ -442,29 +442,6 @@ function startGlobe() {
   // 先按"前台"启动，若实际不可见，shouldRender 的 watch 会在下一帧 pause
   if (documentVisibility.value === 'visible')
     resumeRaf()
-}
-
-// 必须先清空 anchorRefs 让 Teleport 把 marker 移回 wrapper，再 destroy；
-// 否则 destroy 时锚点 div 被移除会连带 marker 一起被剥离。
-// cobe 也不会清理自己创建的 wrapper Z，这里手动收尾。
-async function stopGlobe() {
-  pauseRaf()
-  anchorRefs.value = new Map()
-  await nextTick()
-  globe?.destroy()
-  globe = null
-  if (canvasRef.value && containerRef.value) {
-    const cobeWrapper = canvasRef.value.parentElement
-    if (cobeWrapper && cobeWrapper !== containerRef.value) {
-      containerRef.value.appendChild(canvasRef.value)
-      cobeWrapper.remove()
-    }
-  }
-}
-
-async function rebuildGlobe() {
-  await stopGlobe()
-  startGlobe()
 }
 
 onMounted(() => {
