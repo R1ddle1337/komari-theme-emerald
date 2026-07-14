@@ -43,7 +43,7 @@ interface SharedPingRecordsEntry {
 }
 
 const HISTORY_BUCKET_COUNT = 20
-const CACHE_VERSION = 5
+const CACHE_VERSION = 6
 const CACHE_KEY_PREFIX = 'komari-theme-emerald:node-ping-stats'
 const FULL_LOSS_EPSILON = 1e-6
 const PING_RECORD_REFRESH_INTERVAL_MS = 60_000
@@ -278,6 +278,30 @@ function retainSharedPingRecordsEntry(hours: number): () => void {
   }
 }
 
+// 按任务分组取相邻样本间隔的中位数，作为探测周期的估计值。
+function estimateSampleIntervalMs(records: Array<PingRecord & { timestamp: number }>): number {
+  const timestampsByTask = new Map<number, number[]>()
+  for (const record of records) {
+    const timestamps = timestampsByTask.get(record.task_id) ?? []
+    timestamps.push(record.timestamp)
+    timestampsByTask.set(record.task_id, timestamps)
+  }
+
+  const gaps: number[] = []
+  for (const timestamps of timestampsByTask.values()) {
+    for (let index = 1; index < timestamps.length; index++) {
+      const gap = timestamps[index]! - timestamps[index - 1]!
+      if (gap > 0)
+        gaps.push(gap)
+    }
+  }
+  if (!gaps.length)
+    return 0
+
+  gaps.sort((left, right) => left - right)
+  return gaps[Math.floor(gaps.length / 2)] ?? 0
+}
+
 function buildPingHistory(records: PingRecord[]): NodePingHistoryPoint[] {
   const sortedRecords = records
     .map((record) => {
@@ -292,7 +316,13 @@ function buildPingHistory(records: PingRecord[]): NodePingHistoryPoint[] {
 
   const firstTime = sortedRecords[0]?.timestamp ?? 0
   const lastTime = sortedRecords.at(-1)?.timestamp ?? firstTime
-  const bucketCount = Math.min(HISTORY_BUCKET_COUNT, sortedRecords.length)
+  // 桶宽必须不小于探测周期，否则桶与采样点产生拍频，周期性出现空桶（灰色 N/A）。
+  // Komari 1.2.6 起 getRecords 只返回近期十几分钟样本，固定 20 桶时桶宽会小于周期。
+  const sampleIntervalMs = estimateSampleIntervalMs(sortedRecords)
+  const minBucketMs = sampleIntervalMs * 1.2
+  let bucketCount = Math.min(HISTORY_BUCKET_COUNT, sortedRecords.length)
+  if (minBucketMs > 0)
+    bucketCount = Math.max(1, Math.min(bucketCount, Math.floor((lastTime - firstTime) / minBucketMs) + 1))
   const bucketSize = Math.max(1, (lastTime - firstTime) / bucketCount)
 
   return Array.from({ length: bucketCount }, (_, index) => {
