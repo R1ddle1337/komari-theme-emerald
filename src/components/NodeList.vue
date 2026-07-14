@@ -33,16 +33,15 @@ const rowStaggerLimit = 12
 const appStore = useAppStore()
 
 const columns: ColumnConfig[] = [
-  { key: 'status', label: '状态', width: '40px', sortable: false },
-  { key: 'os', label: '系统', width: '40px', sortable: false },
-  { key: 'name', label: '节点', width: 'minmax(160px, 0.8fr)', sortable: true },
-  { key: 'tags', label: '标签', width: 'minmax(200px, 1fr)', sortable: false },
-  { key: 'uptime', label: '运行时间', width: '116px', sortable: true },
-  { key: 'cpu', label: 'CPU', width: '100px', sortable: false },
-  { key: 'mem', label: '内存', width: '100px', sortable: false },
-  { key: 'disk', label: '硬盘', width: '100px', sortable: false },
-  { key: 'traffic', label: '流量', width: '100px', sortable: false },
-  { key: 'rate', label: '速率', width: '80px', sortable: true },
+  { key: 'status', label: '状态', width: '36px', sortable: false },
+  { key: 'os', label: '系统', width: '36px', sortable: false },
+  { key: 'name', label: '节点', width: 'minmax(170px, 1.2fr)', sortable: true },
+  { key: 'uptime', label: '运行时间', width: 'minmax(100px, 0.6fr)', sortable: true },
+  { key: 'cpu', label: 'CPU', width: 'minmax(110px, 1fr)', sortable: true },
+  { key: 'mem', label: '内存', width: 'minmax(120px, 1fr)', sortable: true },
+  { key: 'disk', label: '硬盘', width: 'minmax(120px, 1fr)', sortable: true },
+  { key: 'traffic', label: '流量', width: 'minmax(120px, 1fr)', sortable: true },
+  { key: 'rate', label: '速率', width: 'minmax(100px, 0.7fr)', sortable: true },
 ]
 
 const sortKey = ref<string>('')
@@ -89,6 +88,7 @@ const sortedNodes = computed(() => {
       case 'mem': return dir * ((a.ram ?? 0) / (a.mem_total || 1) - (b.ram ?? 0) / (b.mem_total || 1))
       case 'disk': return dir * ((a.disk ?? 0) / (a.disk_total || 1) - (b.disk ?? 0) / (b.disk_total || 1))
       case 'traffic':
+        return dir * (getTrafficUsed(a) - getTrafficUsed(b))
       case 'rate':
         return dir * (((a.net_out ?? 0) + (a.net_in ?? 0)) - ((b.net_out ?? 0) + (b.net_in ?? 0)))
       default: return 0
@@ -231,7 +231,7 @@ function getCustomTags(node: NodeData): Array<string> {
         <div
           v-for="(node, index) in sortedNodes"
           :key="getRowTransitionKey(node)"
-          class="flex flex-col relative h-16 justify-center px-2 cursor-pointer bg-background/30 rounded-lg backdrop-blur-xl shadow-[0_0_0_2px] shadow-transparent hover:shadow-slate-500/10 hover:bg-background/60 transition-all"
+          class="flex flex-col relative h-14 justify-center px-2 cursor-pointer bg-background/30 rounded-lg backdrop-blur-xl shadow-[0_0_0_2px] shadow-transparent hover:shadow-slate-500/10 hover:bg-background/60 transition-all"
           :class="[!node.online && '!shadow-red-600/10']"
           :style="getRowTransitionStyle(index)"
           @click="handleClick(node)"
@@ -248,8 +248,8 @@ function getCustomTags(node: NodeData): Array<string> {
                 </div>
               </div>
 
-              <!-- 节点名称 -->
-              <div v-else-if="col.key === 'name'" class="space-y-0.5" :class="[!node.online && 'blur-sm opacity-30']">
+              <!-- 节点名称（标签并入第二行，不再占独立列） -->
+              <div v-else-if="col.key === 'name'" class="space-y-0.5 min-w-0" :class="[!node.online && 'blur-sm opacity-30']">
                 <div class="flex gap-1 items-center text-xs font-semibold">
                   <img
                     v-if="hasRegion(node.region)" :src="getFlagSrc(node.region)"
@@ -258,21 +258,18 @@ function getCustomTags(node: NodeData): Array<string> {
                   <span class="truncate">{{ node.name }}</span>
                 </div>
                 <div
-                  v-if="getPriceTags(node).length > 0"
-                  class="text-[11px] text-muted-foreground/70 truncate"
+                  v-if="getPriceTags(node).length > 0 || getCustomTags(node).length > 0"
+                  class="flex gap-1 items-center overflow-hidden whitespace-nowrap"
                 >
-                  <span v-for="(tag, tagIndex) in getPriceTags(node)" :key="tagIndex" :class="!!tagIndex && 'ml-3'">
+                  <span
+                    v-for="(tag, tagIndex) in getPriceTags(node)" :key="`price-${tagIndex}`"
+                    class="text-[11px] text-muted-foreground/70 shrink-0"
+                  >
                     {{ tag }}
                   </span>
-                </div>
-              </div>
-
-              <!-- 标签 -->
-              <div v-else-if="col.key === 'tags'">
-                <div class="flex flex-wrap gap-1 items-center">
                   <Badge
-                    v-for="(tag, tagIndex) in getCustomTags(node)" :key="tagIndex" variant="outline"
-                    class="!text-[11px] rounded text-muted-foreground border-muted-foreground/10 px-1.5"
+                    v-for="(tag, tagIndex) in getCustomTags(node)" :key="`tag-${tagIndex}`" variant="outline"
+                    class="!text-[10px] rounded text-muted-foreground border-muted-foreground/10 px-1 py-0 shrink-0"
                   >
                     {{ tag }}
                   </Badge>
@@ -298,15 +295,12 @@ function getCustomTags(node: NodeData): Array<string> {
               </div>
 
               <!-- CPU -->
-              <div v-else-if="col.key === 'cpu'" class="group">
+              <div v-else-if="col.key === 'cpu'" class="min-w-0">
                 <div class="space-y-1">
-                  <div class="text-[10px] text-muted-foreground truncate">
-                    <span class="inline group-hover:hidden">
-                      {{ (node.cpu ?? 0).toFixed(1) }}%
-                    </span>
-                    <span class="hidden group-hover:inline">
-                      {{ node.load.toFixed(2) ?? 0 }}, {{ node.load5.toFixed(2) ?? 0 }}, {{ node.load15.toFixed(2) ?? 0
-                      }}
+                  <div class="text-[10px] text-muted-foreground flex items-center justify-between gap-1">
+                    <span class="shrink-0">{{ (node.cpu ?? 0).toFixed(1) }}%</span>
+                    <span class="truncate opacity-70">
+                      {{ (node.load ?? 0).toFixed(2) }} {{ (node.load5 ?? 0).toFixed(2) }} {{ (node.load15 ?? 0).toFixed(2) }}
                     </span>
                   </div>
                   <ProgressThin :percentage="node.cpu ?? 0" :status="getStatus(node.cpu ?? 0)" :height="4" />
@@ -314,13 +308,11 @@ function getCustomTags(node: NodeData): Array<string> {
               </div>
 
               <!-- 内存 -->
-              <div v-else-if="col.key === 'mem'" class="group">
+              <div v-else-if="col.key === 'mem'" class="min-w-0">
                 <div class="space-y-1">
-                  <div class="text-[10px] text-muted-foreground truncate">
-                    <span class="inline group-hover:hidden">
-                      {{ ((node.ram ?? 0) / (node.mem_total || 1) * 100).toFixed(1) }}%
-                    </span>
-                    <span class="hidden group-hover:inline">
+                  <div class="text-[10px] text-muted-foreground flex items-center justify-between gap-1">
+                    <span class="shrink-0">{{ ((node.ram ?? 0) / (node.mem_total || 1) * 100).toFixed(1) }}%</span>
+                    <span class="truncate opacity-70">
                       {{ formatBytes(node.ram ?? 0) }} / {{ formatBytes(node.mem_total ?? 0) }}
                     </span>
                   </div>
@@ -332,13 +324,11 @@ function getCustomTags(node: NodeData): Array<string> {
               </div>
 
               <!-- 硬盘 -->
-              <div v-else-if="col.key === 'disk'" class="group">
+              <div v-else-if="col.key === 'disk'" class="min-w-0">
                 <div class="space-y-1">
-                  <div class="text-[10px] text-muted-foreground truncate">
-                    <span class="inline group-hover:hidden">
-                      {{ ((node.disk ?? 0) / (node.disk_total || 1) * 100).toFixed(1) }}%
-                    </span>
-                    <span class="hidden group-hover:inline">
+                  <div class="text-[10px] text-muted-foreground flex items-center justify-between gap-1">
+                    <span class="shrink-0">{{ ((node.disk ?? 0) / (node.disk_total || 1) * 100).toFixed(1) }}%</span>
+                    <span class="truncate opacity-70">
                       {{ formatBytes(node.disk ?? 0) }} / {{ formatBytes(node.disk_total ?? 0) }}
                     </span>
                   </div>
@@ -350,18 +340,20 @@ function getCustomTags(node: NodeData): Array<string> {
               </div>
 
               <!-- 流量 -->
-              <div v-else-if="col.key === 'traffic'" class="group">
+              <div v-else-if="col.key === 'traffic'" class="min-w-0">
                 <DataTooltip placement="top" class="flex items-center gap-2" content-class="mb-1.5">
                   <div class="space-y-1 w-full">
-                    <div class="text-[10px] text-muted-foreground truncate">
-                      <span class="inline group-hover:hidden">
-                        {{ getTrafficUsedPercentage(node).toFixed(1) }}%
-                      </span>
-                      <span class="hidden group-hover:inline">
-                        {{ formatBytes(getTrafficUsed(node)) }} /
-                        <template v-if="showTrafficProgress(node)">{{ formatBytes(node.traffic_limit) }}</template>
-                        <template v-else>∞</template>
-                      </span>
+                    <div class="text-[10px] text-muted-foreground flex items-center justify-between gap-1">
+                      <template v-if="showTrafficProgress(node)">
+                        <span class="shrink-0">{{ getTrafficUsedPercentage(node).toFixed(1) }}%</span>
+                        <span class="truncate opacity-70">
+                          {{ formatBytes(getTrafficUsed(node)) }} / {{ formatBytes(node.traffic_limit) }}
+                        </span>
+                      </template>
+                      <template v-else>
+                        <span class="shrink-0">{{ formatBytes(getTrafficUsed(node)) }}</span>
+                        <span class="opacity-70">∞</span>
+                      </template>
                     </div>
                     <TrafficProgress
                       :upload="node.net_total_up ?? 0" :download="node.net_total_down ?? 0"
