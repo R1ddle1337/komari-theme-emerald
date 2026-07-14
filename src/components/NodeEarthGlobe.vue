@@ -320,25 +320,24 @@ const arcs = computed<Arc[]>(() => {
   }))
 })
 
-// Emerald 主题配色：亮色薄荷白底 + 祖母绿标记，暗色深青绿底 + 亮翡翠标记
 const themeColors = computed(() => {
   if (appStore.isDark) {
     return {
       dark: 1,
       mapBrightness: 8,
-      baseColor: [0.09, 0.2, 0.17] as [number, number, number],
-      markerColor: [0.2, 0.9, 0.6] as [number, number, number],
-      glowColor: [0.03, 0.1, 0.08] as [number, number, number],
-      arcColor: [0.15, 0.8, 0.55] as [number, number, number],
+      baseColor: [0.12, 0.16, 0.3] as [number, number, number],
+      markerColor: [0.4, 0.75, 1.0] as [number, number, number],
+      glowColor: [0.05, 0.08, 0.2] as [number, number, number],
+      arcColor: [0.4, 0.7, 1.0] as [number, number, number],
     }
   }
   return {
     dark: 0,
-    mapBrightness: 4.5,
-    baseColor: [0.45, 0.82, 0.66] as [number, number, number],
-    markerColor: [0.02, 0.6, 0.42] as [number, number, number],
-    glowColor: [0.88, 0.97, 0.93] as [number, number, number],
-    arcColor: [0.03, 0.55, 0.4] as [number, number, number],
+    mapBrightness: 7,
+    baseColor: [0.97, 0.97, 1] as [number, number, number],
+    markerColor: [0.18, 0.45, 0.9] as [number, number, number],
+    glowColor: [0.9, 0.93, 1] as [number, number, number],
+    arcColor: [0.18, 0.45, 0.9] as [number, number, number],
   }
 })
 
@@ -631,13 +630,14 @@ function formatRate(bytesPerSec: number): string {
 }
 
 /* 大气层光晕：静态渐变代替 canvas 上的 drop-shadow 滤镜，
-   视觉上是球体外沿的一圈辉光，且不再随每帧重绘重算滤镜 */
+   视觉上是球体外沿的一圈辉光，且不再随每帧重绘重算滤镜。
+   色调沿用原 drop-shadow 的蓝色系 */
 .earth-globe-halo {
   background: radial-gradient(
     circle at 50% 50%,
-    oklch(0.72 0.14 165 / 0.22) 0%,
-    oklch(0.72 0.14 165 / 0.1) 38%,
-    oklch(0.72 0.14 165 / 0.16) 47%,
+    oklch(0.6 0.15 250 / 0.2) 0%,
+    oklch(0.6 0.15 250 / 0.08) 38%,
+    oklch(0.6 0.15 250 / 0.14) 47%,
     transparent 60%
   );
 }
@@ -645,9 +645,9 @@ function formatRate(bytesPerSec: number): string {
 :root.dark .earth-globe-halo {
   background: radial-gradient(
     circle at 50% 50%,
-    oklch(0.65 0.15 168 / 0.3) 0%,
-    oklch(0.65 0.15 168 / 0.12) 38%,
-    oklch(0.65 0.15 168 / 0.22) 47%,
+    oklch(0.5 0.18 250 / 0.3) 0%,
+    oklch(0.5 0.18 250 / 0.12) 38%,
+    oklch(0.5 0.18 250 / 0.22) 47%,
     transparent 62%
   );
 }
