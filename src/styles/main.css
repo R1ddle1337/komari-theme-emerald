@@ -175,6 +175,30 @@ html.no-glass body {
   }
 }
 
+/* 画质分级（html 根类由 utils/perfTier 维护，high 无类）：
+   medium 在任何宽度下降玻璃半径；low 走静态高级模式 */
+html.perf-medium:not(.no-glass) .backdrop-blur-xl,
+html.perf-low:not(.no-glass) .backdrop-blur-xl {
+  --tw-backdrop-blur: blur(10px);
+}
+
+/* low：进场过渡去 filter blur（背景已冻结，别再给 GPU 加戏） */
+html.perf-low .node-card-switch-enter-from,
+html.perf-low .node-card-switch-leave-to,
+html.perf-low .node-row-switch-enter-from,
+html.perf-low .node-row-switch-leave-to {
+  filter: none !important;
+}
+
+/* low：隐藏装饰性常驻动画——状态点波纹与大光斑漂浮层 */
+html.perf-low .animate-ping {
+  display: none;
+}
+
+html.perf-low .glass-orbs {
+  display: none;
+}
+
 /* Dynamic hover blur transition on glass cards */
 @layer utilities {
   .glass-hover-blur {

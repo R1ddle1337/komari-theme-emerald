@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { useDocumentVisibility, useElementVisibility } from '@vueuse/core'
-import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useAppStore } from '@/stores/app'
+import { createScrollFreeze, perfTier } from '@/utils/perfTier'
 
 const appStore = useAppStore()
 const canvasRef = ref<HTMLCanvasElement>()
@@ -12,9 +13,26 @@ let startTime = 0
 let lastFrameTime = 0
 
 const isMobile = window.innerWidth < 768
-// 移动端 30fps；桌面 60fps——不设上限时高刷屏（120/165Hz）会满帧跑着色器，
+// 移动端 30fps；桌面 high 60fps / medium 30fps——不设上限时高刷屏会满帧跑着色器，
 // 且背景每变一帧都会触发上层所有 backdrop-filter 重算，纯浪费
-const FRAME_INTERVAL = isMobile ? 1000 / 30 : 1000 / 60
+function getFrameInterval(): number {
+  if (isMobile || perfTier.value === 'medium')
+    return 1000 / 30
+  return 1000 / 60
+}
+
+// low 档：渲一帧就冻结。背景静止后合成器缓存全部 backdrop-filter 结果，玻璃成本归零。
+// 暗色切换/窗口尺寸变化时解冻重绘一帧。
+let lowTierPainted = false
+watch(() => appStore.isDark, () => {
+  lowTierPainted = false
+})
+function handleWindowResize() {
+  lowTierPainted = false
+}
+
+// 滚动中挂起背景重绘，避免滚动失效 + 动画失效双重叠加
+const scrollFreeze = createScrollFreeze()
 
 // Visibility-based pause
 const documentVisibility = useDocumentVisibility()
@@ -179,9 +197,17 @@ function render(now: number) {
   if (documentVisibility.value !== 'visible' || !elementVisible.value)
     return
 
-  // Mobile: 30fps throttle; Desktop: no throttle
-  if (FRAME_INTERVAL && now - lastFrameTime < FRAME_INTERVAL)
+  if (perfTier.value === 'low') {
+    if (lowTierPainted)
+      return
+    lowTierPainted = true
+  }
+  else if (scrollFreeze.isFrozen()) {
     return
+  }
+  else if (now - lastFrameTime < getFrameInterval()) {
+    return
+  }
   lastFrameTime = now
 
   resize()
@@ -196,13 +222,16 @@ function render(now: number) {
 
 onMounted(() => {
   startTime = performance.now()
-  lastFrameTime = startTime
+  lastFrameTime = 0
+  window.addEventListener('resize', handleWindowResize)
   if (initWebGL()) {
     animationId = requestAnimationFrame(render)
   }
 })
 
 onBeforeUnmount(() => {
+  window.removeEventListener('resize', handleWindowResize)
+  scrollFreeze.dispose()
   if (animationId) {
     cancelAnimationFrame(animationId)
     animationId = 0

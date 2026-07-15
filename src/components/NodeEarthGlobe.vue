@@ -14,6 +14,7 @@ import { useAppStore } from '@/stores/app'
 import { useNodesStore } from '@/stores/nodes'
 import { getCoordByCode, getCountryCodeFromRegion } from '@/utils/geoHelper'
 import { formatBytesPerSecondSplit } from '@/utils/helper'
+import { perfTier } from '@/utils/perfTier'
 
 const props = defineProps<{
   nodes?: NodeData[]
@@ -30,7 +31,8 @@ const { width: containerWidth, height: containerHeight } = useElementSize(contai
 const documentVisibility = useDocumentVisibility()
 const elementVisible = useElementVisibility(containerRef)
 const shouldRender = computed(() => documentVisibility.value === 'visible' && elementVisible.value)
-const shouldAutoRotate = computed(() => !appStore.stopEarth)
+// low 档强制静止（可拖拽）：不自转时 RAF 空转即跳帧，WebGL 成本归零
+const shouldAutoRotate = computed(() => !appStore.stopEarth && perfTier.value !== 'low')
 
 let globe: Globe | null = null
 const INITIAL_THETA = 0.22
@@ -93,12 +95,14 @@ const GLOBE_FPS_LIMIT = isSmallScreen ? 30 : undefined
 const AUTO_ROTATE_STEP = isSmallScreen ? 0.006 : 0.003
 const ORIENTATION_LERP = isSmallScreen ? 0.22 : 0.12
 
-// 减少高采样导致的性能问题：按原生 DPR 渲染、上限 2（移动端 1.5）。
+// 减少高采样导致的性能问题：按原生 DPR 渲染、上限 2（移动端 1.5，low 档 1）。
 // 之前强制最低 1.5 会让 DPR=1 的显示器每帧多画 2.25 倍像素（同上游 87cc17a）
+// DPR 在 createGlobe 时固化，探针中途降档只影响下次访问（判级已持久化）
 function getCappedDpr(): number {
   if (typeof window === 'undefined')
     return 1
-  return Math.min(window.devicePixelRatio || 1, isSmallScreen ? 1.5 : 2)
+  const cap = perfTier.value === 'low' ? 1 : isSmallScreen ? 1.5 : 2
+  return Math.min(window.devicePixelRatio || 1, cap)
 }
 
 // 移动端降低 mapSamples 提升性能

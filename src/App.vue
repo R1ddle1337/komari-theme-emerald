@@ -3,6 +3,7 @@ import { nextTick, onMounted, onUnmounted, ref, watchEffect } from 'vue'
 import { Toaster } from '@/components/ui/sonner'
 import { useAppStore } from '@/stores/app'
 import { destroyInitManager, initApp } from '@/utils/init'
+import { initPerfTier } from '@/utils/perfTier'
 import Background from './components/Background.vue'
 import Footer from './components/Footer.vue'
 import Header from './components/Header.vue'
@@ -27,6 +28,10 @@ onMounted(async () => {
     console.error('[App] Initialization failed:', error)
     isReady.value = true
   }
+  // 进场动画结束后再探帧率，避免开场负载导致误判
+  window.setTimeout(() => {
+    initPerfTier()
+  }, 2500)
 })
 
 onUnmounted(() => {
