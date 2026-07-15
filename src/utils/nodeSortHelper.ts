@@ -16,6 +16,15 @@ export const NODE_SORT_OPTIONS: NodeSortOption[] = [
   { key: 'rate', label: '速率' },
 ]
 
+// 离线节点固定排在最后（组内保持原有顺序），任何排序/置顶之后最外层套用
+export function applyOfflineLast(nodes: NodeData[]): NodeData[] {
+  const online: NodeData[] = []
+  const offline: NodeData[] = []
+  for (const node of nodes)
+    (node.online ? online : offline).push(node)
+  return offline.length && online.length ? [...online, ...offline] : nodes
+}
+
 // 收藏的节点固定排在最前（组内保持原有顺序）
 export function applyPinnedFirst(nodes: NodeData[], pinned: string[]): NodeData[] {
   if (!pinned.length)

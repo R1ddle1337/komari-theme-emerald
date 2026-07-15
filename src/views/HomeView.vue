@@ -13,7 +13,7 @@ import { useAppStore } from '@/stores/app'
 import { useNodesStore } from '@/stores/nodes'
 import { getCountryCodeFromRegion } from '@/utils/geoHelper'
 import { isNodeInGroup, parseNodeGroups } from '@/utils/groupHelper'
-import { applyPinnedFirst, NODE_SORT_OPTIONS, sortNodes } from '@/utils/nodeSortHelper'
+import { applyOfflineLast, applyPinnedFirst, NODE_SORT_OPTIONS, sortNodes } from '@/utils/nodeSortHelper'
 import { getRegionDisplayName, isRegionMatch } from '@/utils/regionHelper'
 
 defineOptions({ name: 'HomeView' })
@@ -154,7 +154,7 @@ const nodeList = computed(() => {
     filtered = filtered.filter(n => isNodeMatchSearch(n, debouncedSearchText.value))
   }
   if (appStore.nodeViewMode === 'card')
-    return applyPinnedFirst(sortNodes(filtered, cardSortKey.value, cardSortDir.value), appStore.pinnedNodes)
+    return applyOfflineLast(applyPinnedFirst(sortNodes(filtered, cardSortKey.value, cardSortDir.value), appStore.pinnedNodes))
   return filtered
 })
 

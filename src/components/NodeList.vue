@@ -10,7 +10,7 @@ import { DataTooltip } from '@/components/ui/data-tooltip'
 import { ProgressThin } from '@/components/ui/progress-thin'
 import { useAppStore } from '@/stores/app'
 import { formatBytesPerSecondWithConfig, formatBytesWithConfig, formatDateTime, formatRelativeTime, formatUptimeWithFormat, getStatus } from '@/utils/helper'
-import { applyPinnedFirst, getTrafficUsed, sortNodes } from '@/utils/nodeSortHelper'
+import { applyOfflineLast, applyPinnedFirst, getTrafficUsed, sortNodes } from '@/utils/nodeSortHelper'
 import { getOSImage, getOSName } from '@/utils/osImageHelper'
 import { getRegionCode, getRegionDisplayName } from '@/utils/regionHelper'
 import { buildPriceTags, parseTags } from '@/utils/tagHelper'
@@ -66,7 +66,7 @@ function handleSort(col: ColumnConfig) {
   }
 }
 
-const sortedNodes = computed(() => applyPinnedFirst(sortNodes(props.nodes, sortKey.value, sortDir.value), appStore.pinnedNodes))
+const sortedNodes = computed(() => applyOfflineLast(applyPinnedFirst(sortNodes(props.nodes, sortKey.value, sortDir.value), appStore.pinnedNodes)))
 
 const formatBytes = (bytes: number) => formatBytesWithConfig(bytes)
 const formatBytesPerSecond = (bytes: number) => formatBytesPerSecondWithConfig(bytes)
