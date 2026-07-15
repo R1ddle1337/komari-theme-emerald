@@ -167,6 +167,20 @@ async function fetchJson<T>(url: string, timeoutMs: number): Promise<T> {
   }
 }
 
+// 用浏览器内置 Intl 把国家代码转成中文名（地理源返回的是英文）
+function localizeCountry(code: string | undefined, fallback: string | undefined): string {
+  if (code) {
+    try {
+      const name = new Intl.DisplayNames(['zh-CN'], { type: 'region' }).of(code.toUpperCase())
+      if (name && name !== code.toUpperCase())
+        return name
+    }
+    catch {
+    }
+  }
+  return fallback || ''
+}
+
 function parseCfTrace(text: string): Record<string, string> {
   const result: Record<string, string> = {}
   for (const line of text.split('\n')) {
@@ -218,28 +232,27 @@ async function fetchVisitorGeo(): Promise<VisitorGeoData | null> {
   // Step 2: Get geo details for the IP
   const geoLoaders = [
     async (): Promise<VisitorGeoData> => {
-      const url = cfIp
-        ? `https://ip-api.com/json/${cfIp}?lang=zh-CN&fields=status,country,countryCode,regionName,city,query,isp`
-        : 'https://ip-api.com/json/?lang=zh-CN&fields=status,country,countryCode,regionName,city,query,isp'
+      // ipwho.is：免费支持 HTTPS + CORS（ip-api.com 免费版走 HTTPS 会 403，不能用）
+      const url = cfIp ? `https://ipwho.is/${cfIp}` : 'https://ipwho.is/'
       const data = await fetchJson<{
-        status: string
+        success: boolean
+        ip?: string
         country?: string
-        countryCode?: string
-        regionName?: string
+        country_code?: string
+        region?: string
         city?: string
-        query?: string
-        isp?: string
+        connection?: { isp?: string, org?: string }
       }>(url, 4000)
 
-      if (data.status !== 'success' || !data.query) {
-        throw new Error('ip-api unavailable')
+      if (!data.success || !data.ip) {
+        throw new Error('ipwho.is unavailable')
       }
 
       return {
-        ip: cfIp || data.query,
-        isp: data.isp || '未知运营商',
-        location: [data.country, data.city || data.regionName].filter(Boolean).join(' · ') || '未知位置',
-        countryCode: data.countryCode || cfCountryCode || '',
+        ip: cfIp || data.ip,
+        isp: data.connection?.isp || data.connection?.org || '未知运营商',
+        location: [localizeCountry(data.country_code, data.country), data.city || data.region].filter(Boolean).join(' · ') || '未知位置',
+        countryCode: data.country_code || cfCountryCode || '',
       }
     },
     async (): Promise<VisitorGeoData> => {
@@ -264,7 +277,7 @@ async function fetchVisitorGeo(): Promise<VisitorGeoData | null> {
       return {
         ip: cfIp || data.ip,
         isp: data.org || '未知运营商',
-        location: [data.country_name, data.city || data.region].filter(Boolean).join(' · ') || '未知位置',
+        location: [localizeCountry(data.country_code, data.country_name), data.city || data.region].filter(Boolean).join(' · ') || '未知位置',
         countryCode: data.country_code || cfCountryCode || '',
       }
     },
@@ -274,7 +287,7 @@ async function fetchVisitorGeo(): Promise<VisitorGeoData | null> {
         return {
           ip: cfIp,
           isp: '未知运营商',
-          location: cfCountryCode || '未知位置',
+          location: localizeCountry(cfCountryCode, cfCountryCode) || '未知位置',
           countryCode: cfCountryCode,
         }
       }
