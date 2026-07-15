@@ -10,6 +10,7 @@ import { DataTooltip } from '@/components/ui/data-tooltip'
 import { ProgressThin } from '@/components/ui/progress-thin'
 import { useAppStore } from '@/stores/app'
 import { formatBytesPerSecondWithConfig, formatBytesWithConfig, formatDateTime, formatUptimeWithFormat, getStatus } from '@/utils/helper'
+import { getTrafficUsed, sortNodes } from '@/utils/nodeSortHelper'
 import { getOSImage, getOSName } from '@/utils/osImageHelper'
 import { getRegionCode, getRegionDisplayName } from '@/utils/regionHelper'
 import { formatPriceWithCycle, getDaysUntilExpired, getExpireStatus, parseTags } from '@/utils/tagHelper'
@@ -65,42 +66,7 @@ function handleSort(col: ColumnConfig) {
   }
 }
 
-const sortedNodes = computed(() => {
-  const nodes = [...props.nodes]
-  const key = sortKey.value
-  const dir = sortDir.value
-  if (!key)
-    return nodes
-  return nodes.sort((a, b) => {
-    switch (key) {
-      case 'status': return dir * ((a.online ? 1 : 0) - (b.online ? 1 : 0))
-      case 'region': {
-        const va = (a.region || '').toLowerCase()
-        const vb = (b.region || '').toLowerCase()
-        return dir * (va < vb ? -1 : va > vb ? 1 : 0)
-      }
-      case 'name': {
-        const va = (a.name || '').toLowerCase()
-        const vb = (b.name || '').toLowerCase()
-        return dir * (va < vb ? -1 : va > vb ? 1 : 0)
-      }
-      case 'uptime': return dir * ((a.uptime ?? 0) - (b.uptime ?? 0))
-      case 'os': {
-        const va = (a.os || '').toLowerCase()
-        const vb = (b.os || '').toLowerCase()
-        return dir * (va < vb ? -1 : va > vb ? 1 : 0)
-      }
-      case 'cpu': return dir * ((a.cpu ?? 0) - (b.cpu ?? 0))
-      case 'mem': return dir * ((a.ram ?? 0) / (a.mem_total || 1) - (b.ram ?? 0) / (b.mem_total || 1))
-      case 'disk': return dir * ((a.disk ?? 0) / (a.disk_total || 1) - (b.disk ?? 0) / (b.disk_total || 1))
-      case 'traffic':
-        return dir * (getTrafficUsed(a) - getTrafficUsed(b))
-      case 'rate':
-        return dir * (((a.net_out ?? 0) + (a.net_in ?? 0)) - ((b.net_out ?? 0) + (b.net_in ?? 0)))
-      default: return 0
-    }
-  })
-})
+const sortedNodes = computed(() => sortNodes(props.nodes, sortKey.value, sortDir.value))
 
 const formatBytes = (bytes: number) => formatBytesWithConfig(bytes)
 const formatBytesPerSecond = (bytes: number) => formatBytesPerSecondWithConfig(bytes)
@@ -171,18 +137,6 @@ function getTrafficUsedPercentage(node: NodeData): number {
       break
   }
   return Math.min((used / node.traffic_limit) * 100, 100)
-}
-
-function getTrafficUsed(node: NodeData): number {
-  const { net_total_up = 0, net_total_down = 0, traffic_limit_type } = node
-  switch (traffic_limit_type) {
-    case 'up': return net_total_up
-    case 'down': return net_total_down
-    case 'min': return Math.min(net_total_up, net_total_down)
-    case 'max': return Math.max(net_total_up, net_total_down)
-    case 'sum':
-    default: return net_total_up + net_total_down
-  }
 }
 
 function formatOfflineTime(node: NodeData): string {

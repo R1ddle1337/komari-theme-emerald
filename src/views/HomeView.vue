@@ -13,6 +13,7 @@ import { useAppStore } from '@/stores/app'
 import { useNodesStore } from '@/stores/nodes'
 import { getCountryCodeFromRegion } from '@/utils/geoHelper'
 import { isNodeInGroup, parseNodeGroups } from '@/utils/groupHelper'
+import { NODE_SORT_OPTIONS, sortNodes } from '@/utils/nodeSortHelper'
 import { getRegionDisplayName, isRegionMatch } from '@/utils/regionHelper'
 
 defineOptions({ name: 'HomeView' })
@@ -129,11 +130,27 @@ const groupNodeList = computed(() => {
   return nodesStore.nodes.filter(node => isNodeInGroup(node.group, selected))
 })
 
+// 卡片视图的排序（列表视图由 NodeList 自己的表头/chips 排序）
+const cardSortKey = ref('')
+const cardSortDir = ref<1 | -1>(1)
+
+function handleCardSort(key: string) {
+  if (cardSortKey.value === key) {
+    cardSortDir.value = cardSortDir.value === 1 ? -1 : 1
+  }
+  else {
+    cardSortKey.value = key
+    cardSortDir.value = 1
+  }
+}
+
 const nodeList = computed(() => {
   let filtered = groupNodeList.value
   if (debouncedSearchText.value.trim()) {
     filtered = filtered.filter(n => isNodeMatchSearch(n, debouncedSearchText.value))
   }
+  if (appStore.nodeViewMode === 'card')
+    return sortNodes(filtered, cardSortKey.value, cardSortDir.value)
   return filtered
 })
 
@@ -226,6 +243,17 @@ function getNodeItemTransitionStyle(index: number): Record<string, string> {
               </div>
             </div>
           </div>
+          <!-- 卡片视图排序 chips -->
+          <div v-if="appStore.nodeViewMode === 'card'" class="sort-chips flex gap-1 overflow-x-auto -mt-1 pointer-events-auto">
+            <button
+              v-for="opt in NODE_SORT_OPTIONS" :key="opt.key" type="button"
+              class="shrink-0 h-6 px-2 rounded-md text-[11px] backdrop-blur-xl bg-background/40 ring-1 ring-foreground/[0.06] transition-colors hover:bg-background/60"
+              :class="[cardSortKey === opt.key ? 'text-green-600 bg-background/70' : 'text-muted-foreground']"
+              @click="handleCardSort(opt.key)"
+            >
+              {{ opt.label }}{{ cardSortKey === opt.key ? (cardSortDir === 1 ? ' ↑' : ' ↓') : '' }}
+            </button>
+          </div>
           <TabsContent v-for="g in allTabs" :key="g.name" :value="g.name" class="pointer-events-auto">
             <TransitionGroup
               v-if="nodeList.length !== 0 && appStore.nodeViewMode === 'card'"
@@ -262,6 +290,14 @@ function getNodeItemTransitionStyle(index: number): Record<string, string> {
 </template>
 
 <style scoped>
+.sort-chips {
+  scrollbar-width: none;
+}
+
+.sort-chips::-webkit-scrollbar {
+  display: none;
+}
+
 .node-card-switch-enter-active,
 .node-card-switch-leave-active {
   transition:
