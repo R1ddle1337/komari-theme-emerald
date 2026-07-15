@@ -2,6 +2,7 @@
 import { nextTick, onMounted, onUnmounted, ref, watchEffect } from 'vue'
 import { Toaster } from '@/components/ui/sonner'
 import { useAppStore } from '@/stores/app'
+import { useNodesStore } from '@/stores/nodes'
 import { destroyInitManager, initApp } from '@/utils/init'
 import { initPerfTier } from '@/utils/perfTier'
 import Background from './components/Background.vue'
@@ -11,11 +12,25 @@ import LoadingCover from './components/LoadingCover.vue'
 import Provider from './components/Provider.vue'
 
 const appStore = useAppStore()
+const nodesStore = useNodesStore()
 
 const isReady = ref(false)
 
 watchEffect(() => {
   document.documentElement.classList.toggle('no-glass', !appStore.enableGlassEffect)
+})
+
+// 浏览器标题实时显示在线数
+watchEffect(() => {
+  const sitename = appStore.publicSettings?.sitename || 'Komari Monitor'
+  const total = nodesStore.nodes.length
+  if (total > 0) {
+    const online = nodesStore.nodes.filter(node => node.online).length
+    document.title = `${sitename} · ${online}/${total} 在线`
+  }
+  else {
+    document.title = sitename
+  }
 })
 
 onMounted(async () => {

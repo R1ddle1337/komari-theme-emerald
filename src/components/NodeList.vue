@@ -9,11 +9,11 @@ import { Badge } from '@/components/ui/badge'
 import { DataTooltip } from '@/components/ui/data-tooltip'
 import { ProgressThin } from '@/components/ui/progress-thin'
 import { useAppStore } from '@/stores/app'
-import { formatBytesPerSecondWithConfig, formatBytesWithConfig, formatDateTime, formatUptimeWithFormat, getStatus } from '@/utils/helper'
-import { getTrafficUsed, sortNodes } from '@/utils/nodeSortHelper'
+import { formatBytesPerSecondWithConfig, formatBytesWithConfig, formatDateTime, formatRelativeTime, formatUptimeWithFormat, getStatus } from '@/utils/helper'
+import { applyPinnedFirst, getTrafficUsed, sortNodes } from '@/utils/nodeSortHelper'
 import { getOSImage, getOSName } from '@/utils/osImageHelper'
 import { getRegionCode, getRegionDisplayName } from '@/utils/regionHelper'
-import { formatPriceWithCycle, getDaysUntilExpired, getExpireStatus, parseTags } from '@/utils/tagHelper'
+import { buildPriceTags, parseTags } from '@/utils/tagHelper'
 
 interface ColumnConfig {
   key: string
@@ -66,7 +66,7 @@ function handleSort(col: ColumnConfig) {
   }
 }
 
-const sortedNodes = computed(() => sortNodes(props.nodes, sortKey.value, sortDir.value))
+const sortedNodes = computed(() => applyPinnedFirst(sortNodes(props.nodes, sortKey.value, sortDir.value), appStore.pinnedNodes))
 
 const formatBytes = (bytes: number) => formatBytesWithConfig(bytes)
 const formatBytesPerSecond = (bytes: number) => formatBytesPerSecondWithConfig(bytes)
@@ -143,21 +143,25 @@ function formatOfflineTime(node: NodeData): string {
   return formatDateTime(node.time)
 }
 
-function getPriceTags(node: NodeData): Array<string> {
-  const tags: Array<string> = []
-  const lang = appStore.lang
-  if (node.price !== 0) {
-    const days = getDaysUntilExpired(node.expired_at)
-    const status = getExpireStatus(node.expired_at)
-    if (status === 'expired')
-      tags.push(lang === 'zh-CN' ? '已过期' : 'Expired')
-    else if (status === 'long_term')
-      tags.push(lang === 'zh-CN' ? '长期' : 'Long-term')
-    else tags.push(lang === 'zh-CN' ? `剩余 ${days} 天` : `${days} days left`)
-    const priceText = formatPriceWithCycle(node.price, node.billing_cycle, node.currency, lang)
-    tags.push(priceText)
-  }
-  return tags
+function getOfflineRelative(node: NodeData): string {
+  const relative = formatRelativeTime(node.time)
+  return relative === '-' ? '' : ` ${relative}`
+}
+
+function getPriceTags(node: NodeData) {
+  return buildPriceTags(node, appStore.lang)
+}
+
+function getPriceTagClass(tone: 'danger' | 'warn' | 'normal'): string {
+  if (tone === 'danger')
+    return 'text-red-500 font-medium'
+  if (tone === 'warn')
+    return 'text-amber-500'
+  return 'text-muted-foreground/70'
+}
+
+function togglePin(node: NodeData) {
+  appStore.togglePinnedNode(node.uuid)
 }
 
 function getCustomTags(node: NodeData): Array<string> {
@@ -191,7 +195,7 @@ function getCustomTags(node: NodeData): Array<string> {
         <div
           v-for="(node, index) in sortedNodes"
           :key="getRowTransitionKey(node)"
-          class="flex flex-col relative h-14 justify-center px-2 cursor-pointer bg-background/30 rounded-lg backdrop-blur-xl shadow-[0_0_0_2px] shadow-transparent hover:shadow-slate-500/10 hover:bg-background/60 transition-all"
+          class="group flex flex-col relative h-14 justify-center px-2 cursor-pointer bg-background/30 rounded-lg backdrop-blur-xl shadow-[0_0_0_2px] shadow-transparent hover:shadow-slate-500/10 hover:bg-background/60 transition-all"
           :class="[!node.online && '!shadow-red-600/10']"
           :style="getRowTransitionStyle(index)"
           @click="handleClick(node)"
@@ -216,6 +220,16 @@ function getCustomTags(node: NodeData): Array<string> {
                     :alt="getRegionDisplayName(node.region)" class="size-5 rounded-sm"
                   >
                   <span class="truncate">{{ node.name }}</span>
+                  <button
+                    type="button" :aria-label="appStore.isNodePinned(node.uuid) ? '取消置顶' : '置顶'"
+                    class="shrink-0 flex items-center transition-[color,opacity]"
+                    :class="appStore.isNodePinned(node.uuid)
+                      ? 'text-amber-400'
+                      : 'text-muted-foreground/40 opacity-0 group-hover:opacity-100 hover:text-amber-400'"
+                    @click.stop="togglePin(node)"
+                  >
+                    <Icon :icon="appStore.isNodePinned(node.uuid) ? 'tabler:star-filled' : 'tabler:star'" width="12" height="12" />
+                  </button>
                 </div>
                 <div
                   v-if="getPriceTags(node).length > 0 || getCustomTags(node).length > 0"
@@ -223,9 +237,10 @@ function getCustomTags(node: NodeData): Array<string> {
                 >
                   <span
                     v-for="(tag, tagIndex) in getPriceTags(node)" :key="`price-${tagIndex}`"
-                    class="text-[11px] text-muted-foreground/70 shrink-0"
+                    class="text-[11px] shrink-0"
+                    :class="getPriceTagClass(tag.tone)"
                   >
-                    {{ tag }}
+                    {{ tag.text }}
                   </span>
                   <Badge
                     v-for="(tag, tagIndex) in getCustomTags(node)" :key="`tag-${tagIndex}`" variant="outline"
@@ -357,7 +372,7 @@ function getCustomTags(node: NodeData): Array<string> {
             <div class="grid gap-2 items-center justify-center" :style="gridStyle">
               <div class="h-full space-y-1" :style="offlineOverlayContentStyle">
                 <div class="text-sm font-semibold truncate">
-                  <span class="text-red-500">离线</span> {{ node.name }}
+                  <span class="text-red-500">离线{{ getOfflineRelative(node) }}</span> {{ node.name }}
                 </div>
                 <div class="text-xs text-muted-foreground">
                   {{ formatOfflineTime(node) }}
@@ -414,6 +429,14 @@ function getCustomTags(node: NodeData): Array<string> {
             >
             <img :src="getOSImage(node.os)" :alt="getOSName(node.os)" class="size-4 shrink-0">
             <span class="truncate text-xs font-semibold flex-1 min-w-0">{{ node.name }}</span>
+            <button
+              type="button" :aria-label="appStore.isNodePinned(node.uuid) ? '取消置顶' : '置顶'"
+              class="shrink-0 flex items-center p-0.5"
+              :class="appStore.isNodePinned(node.uuid) ? 'text-amber-400' : 'text-muted-foreground/30'"
+              @click.stop="togglePin(node)"
+            >
+              <Icon :icon="appStore.isNodePinned(node.uuid) ? 'tabler:star-filled' : 'tabler:star'" width="13" height="13" />
+            </button>
             <span class="text-[10px] shrink-0 flex items-center gap-1.5">
               <span class="text-green-600 flex items-center gap-0.5">
                 <Icon icon="tabler:chevron-up" width="12" height="12" />
@@ -433,9 +456,10 @@ function getCustomTags(node: NodeData): Array<string> {
           >
             <span
               v-for="(tag, tagIndex) in getPriceTags(node)" :key="`price-${tagIndex}`"
-              class="text-[11px] text-muted-foreground/70 shrink-0"
+              class="text-[11px] shrink-0"
+              :class="getPriceTagClass(tag.tone)"
             >
-              {{ tag }}
+              {{ tag.text }}
             </span>
             <Badge
               v-for="(tag, tagIndex) in getCustomTags(node)" :key="`tag-${tagIndex}`" variant="outline"
@@ -504,7 +528,7 @@ function getCustomTags(node: NodeData): Array<string> {
           aria-hidden="true"
         >
           <div class="text-sm font-semibold truncate max-w-full">
-            <span class="text-red-500">离线</span> {{ node.name }}
+            <span class="text-red-500">离线{{ getOfflineRelative(node) }}</span> {{ node.name }}
           </div>
           <div class="text-xs text-muted-foreground">
             {{ formatOfflineTime(node) }}

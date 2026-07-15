@@ -40,6 +40,22 @@ const useAppStore = defineStore('app', () => {
   const isLoggedIn = ref<boolean>(false)
   const connectionError = ref<boolean>(false)
 
+  // 收藏置顶的节点 uuid 列表
+  const pinnedNodes = useStorageAsync<string[]>('pinnedNodes', [], localStorage)
+
+  function togglePinnedNode(uuid: string) {
+    const list = pinnedNodes.value
+    const index = list.indexOf(uuid)
+    if (index === -1)
+      pinnedNodes.value = [...list, uuid]
+    else
+      pinnedNodes.value = list.filter(id => id !== uuid)
+  }
+
+  function isNodePinned(uuid: string): boolean {
+    return pinnedNodes.value.includes(uuid)
+  }
+
   // 首页滚动位置记忆
   const homeScrollPosition = ref<number>(0)
 
@@ -384,6 +400,9 @@ const useAppStore = defineStore('app', () => {
     lang,
     nodeSelectedGroup,
     nodeViewMode,
+    pinnedNodes,
+    togglePinnedNode,
+    isNodePinned,
     defaultViewMode,
     rpcTransportMode,
     byteDecimals,

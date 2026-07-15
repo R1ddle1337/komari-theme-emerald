@@ -13,7 +13,7 @@ import { useAppStore } from '@/stores/app'
 import { useNodesStore } from '@/stores/nodes'
 import { getCountryCodeFromRegion } from '@/utils/geoHelper'
 import { isNodeInGroup, parseNodeGroups } from '@/utils/groupHelper'
-import { NODE_SORT_OPTIONS, sortNodes } from '@/utils/nodeSortHelper'
+import { applyPinnedFirst, NODE_SORT_OPTIONS, sortNodes } from '@/utils/nodeSortHelper'
 import { getRegionDisplayName, isRegionMatch } from '@/utils/regionHelper'
 
 defineOptions({ name: 'HomeView' })
@@ -54,8 +54,12 @@ watch(searchText, (value) => {
 })
 
 const groups = computed(() => [
-  { tab: '全部节点', name: 'all' },
-  ...nodesStore.groups.map(g => ({ tab: g, name: g })),
+  { tab: '全部节点', name: 'all', count: nodesStore.nodes.length },
+  ...nodesStore.groups.map(g => ({
+    tab: g,
+    name: g,
+    count: nodesStore.nodes.filter(node => isNodeInGroup(node.group, g)).length,
+  })),
 ])
 
 // 按国家/地区聚合
@@ -74,7 +78,7 @@ const regionGroups = computed(() => {
   // 按节点数量降序排列
   return Array.from(regionMap.entries())
     .sort((a, b) => b[1].count - a[1].count)
-    .map(([code, info]) => ({ tab: `${info.emoji} ${info.name}`, name: `region:${code}`, code }))
+    .map(([code, info]) => ({ tab: `${info.emoji} ${info.name}`, name: `region:${code}`, code, count: info.count }))
 })
 
 const allTabs = computed(() => [
@@ -150,7 +154,7 @@ const nodeList = computed(() => {
     filtered = filtered.filter(n => isNodeMatchSearch(n, debouncedSearchText.value))
   }
   if (appStore.nodeViewMode === 'card')
-    return sortNodes(filtered, cardSortKey.value, cardSortDir.value)
+    return applyPinnedFirst(sortNodes(filtered, cardSortKey.value, cardSortDir.value), appStore.pinnedNodes)
   return filtered
 })
 
@@ -209,6 +213,7 @@ function getNodeItemTransitionStyle(index: number): Record<string, string> {
                   class="h-6.5 flex-none shrink-0 text-xs border-none data-[state=active]:text-green-600 shadow-none rounded-sm"
                 >
                   {{ g.tab }}
+                  <span class="text-[10px] opacity-50 -ml-0.5">{{ g.count }}</span>
                 </TabsTrigger>
               </TabsList>
             </div>

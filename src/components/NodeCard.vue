@@ -9,10 +9,10 @@ import { DataTooltip } from '@/components/ui/data-tooltip'
 import { ProgressThin } from '@/components/ui/progress-thin'
 import { useNodePingDisplay } from '@/composables/useNodePingDisplay'
 import { useAppStore } from '@/stores/app'
-import { formatBytesPerSecondWithConfig, formatBytesWithConfig, formatDateTime, formatUptimeWithFormat, getStatus } from '@/utils/helper'
+import { formatBytesPerSecondWithConfig, formatBytesWithConfig, formatDateTime, formatRelativeTime, formatUptimeWithFormat, getStatus } from '@/utils/helper'
 import { getOSImage, getOSName } from '@/utils/osImageHelper'
 import { getRegionCode, getRegionDisplayName } from '@/utils/regionHelper'
-import { formatPriceWithCycle, getDaysUntilExpired, getExpireStatus, parseTags } from '@/utils/tagHelper'
+import { buildPriceTags, parseTags } from '@/utils/tagHelper'
 
 const props = defineProps<{ node: NodeData }>()
 
@@ -78,23 +78,10 @@ const trafficUsed = computed(() => {
   }
 })
 
-const priceTags = computed(() => {
-  const tags: Array<string> = []
-  const lang = appStore.lang
-  const node = props.node
-  if (node.price !== 0) {
-    const days = getDaysUntilExpired(node.expired_at)
-    const status = getExpireStatus(node.expired_at)
-    if (status === 'expired')
-      tags.push(lang === 'zh-CN' ? '已过期' : 'Expired')
-    else if (status === 'long_term')
-      tags.push(lang === 'zh-CN' ? '长期' : 'Long-term')
-    else tags.push(lang === 'zh-CN' ? `剩余 ${days} 天` : `${days} days left`)
-    const priceText = formatPriceWithCycle(node.price, node.billing_cycle, node.currency, lang)
-    tags.push(priceText)
-  }
-  return tags
-})
+const priceTags = computed(() => buildPriceTags(props.node, appStore.lang))
+
+const isPinned = computed(() => appStore.isNodePinned(props.node.uuid))
+const offlineRelative = computed(() => formatRelativeTime(props.node.time))
 
 const customTags = computed(() => parseTags(props.node.tags).map(t => t.text))
 
@@ -131,6 +118,14 @@ function hasRegion(region: string | null | undefined): boolean {
 
     <template #header-extra>
       <div class="flex gap-2 items-center">
+        <button
+          type="button" :aria-label="isPinned ? '取消置顶' : '置顶'"
+          class="flex items-center transition-colors"
+          :class="isPinned ? 'text-amber-400' : 'text-muted-foreground/40 hover:text-amber-400'"
+          @click.stop="appStore.togglePinnedNode(props.node.uuid)"
+        >
+          <Icon :icon="isPinned ? 'tabler:star-filled' : 'tabler:star'" width="14" height="14" />
+        </button>
         <img :src="getOSImage(props.node.os)" :alt="getOSName(props.node.os)" class="size-4">
         <img
           v-if="hasRegion(props.node.region)" :src="`/images/flags/${getRegionCode(props.node.region)}.svg`"
@@ -217,7 +212,7 @@ function hasRegion(region: string | null | undefined): boolean {
             class="absolute inset-0 flex flex-col gap-1 items-center justify-center z-1 text-center" aria-hidden="true"
           >
             <div class="text-sm font-medium text-destructive">
-              离线
+              离线{{ offlineRelative !== '-' ? ` ${offlineRelative}` : '' }}
             </div>
             <div class="text-xs text-muted-foreground">
               {{ offlineTime }}
@@ -274,8 +269,11 @@ function hasRegion(region: string | null | undefined): boolean {
             :class="[!props.node.online ? 'blur-xs opacity-60' : '', appStore.showNodeUptime ? 'max-md:col-span-3' : '']"
           >
             <div class="text-[11px] text-muted-foreground flex flex-row gap-3 max-md:gap-1.5 max-md:flex-wrap max-md:justify-center overflow-hidden">
-              <span v-for="(tag, index) in priceTags" :key="index" class="whitespace-nowrap">
-                {{ tag }}
+              <span
+                v-for="(tag, index) in priceTags" :key="index" class="whitespace-nowrap"
+                :class="tag.tone === 'danger' ? 'text-red-500 font-medium' : tag.tone === 'warn' ? 'text-amber-500' : ''"
+              >
+                {{ tag.text }}
               </span>
             </div>
           </div>

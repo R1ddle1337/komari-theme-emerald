@@ -356,3 +356,37 @@ export function hasIPv4(ipv4: string | undefined | null): boolean {
 export function hasIPv6(ipv6: string | undefined | null): boolean {
   return !!ipv6 && ipv6.trim() !== ''
 }
+
+export interface PriceTag {
+  text: string
+  /** danger：已过期/7 天内到期；warn：15 天内到期 */
+  tone: 'danger' | 'warn' | 'normal'
+}
+
+/**
+ * 构造节点价格/到期标签（带临期色调），卡片与列表视图共用
+ */
+export function buildPriceTags(
+  node: { price: number, expired_at?: string | number, billing_cycle: number, currency: string },
+  lang: 'zh-CN' | 'en-US' = 'zh-CN',
+): PriceTag[] {
+  const tags: PriceTag[] = []
+  if (node.price === 0)
+    return tags
+
+  const days = getDaysUntilExpired(node.expired_at)
+  const status = getExpireStatus(node.expired_at)
+  const tone: PriceTag['tone'] = status === 'expired' || status === 'critical'
+    ? 'danger'
+    : status === 'warning' ? 'warn' : 'normal'
+
+  if (status === 'expired')
+    tags.push({ text: lang === 'zh-CN' ? '已过期' : 'Expired', tone })
+  else if (status === 'long_term')
+    tags.push({ text: lang === 'zh-CN' ? '长期' : 'Long-term', tone: 'normal' })
+  else
+    tags.push({ text: lang === 'zh-CN' ? `剩余 ${days} 天` : `${days} days left`, tone })
+
+  tags.push({ text: formatPriceWithCycle(node.price, node.billing_cycle, node.currency, lang), tone: 'normal' })
+  return tags
+}

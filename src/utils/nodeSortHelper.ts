@@ -16,6 +16,18 @@ export const NODE_SORT_OPTIONS: NodeSortOption[] = [
   { key: 'rate', label: '速率' },
 ]
 
+// 收藏的节点固定排在最前（组内保持原有顺序）
+export function applyPinnedFirst(nodes: NodeData[], pinned: string[]): NodeData[] {
+  if (!pinned.length)
+    return nodes
+  const pinnedSet = new Set(pinned)
+  const front: NodeData[] = []
+  const rest: NodeData[] = []
+  for (const node of nodes)
+    (pinnedSet.has(node.uuid) ? front : rest).push(node)
+  return front.length ? [...front, ...rest] : nodes
+}
+
 export function getTrafficUsed(node: NodeData): number {
   const { net_total_up = 0, net_total_down = 0, traffic_limit_type } = node
   switch (traffic_limit_type) {
