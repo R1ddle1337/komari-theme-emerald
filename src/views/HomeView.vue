@@ -326,6 +326,14 @@ function getNodeItemTransitionStyle(index: number): Record<string, string> {
   filter: blur(2px);
 }
 
+/* 移动端进场不做 filter blur：打开瞬间 GPU 最挤，模糊过渡纯增负担 */
+@media (max-width: 767px) {
+  .node-card-switch-enter-from,
+  .node-card-switch-leave-to {
+    filter: none;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .node-card-switch-enter-active,
   .node-card-switch-leave-active,

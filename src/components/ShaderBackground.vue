@@ -12,8 +12,9 @@ let startTime = 0
 let lastFrameTime = 0
 
 const isMobile = window.innerWidth < 768
-// Mobile: 30fps cap; Desktop: uncapped (60fps)
-const FRAME_INTERVAL = isMobile ? 1000 / 30 : 0
+// 移动端 30fps；桌面 60fps——不设上限时高刷屏（120/165Hz）会满帧跑着色器，
+// 且背景每变一帧都会触发上层所有 backdrop-filter 重算，纯浪费
+const FRAME_INTERVAL = isMobile ? 1000 / 30 : 1000 / 60
 
 // Visibility-based pause
 const documentVisibility = useDocumentVisibility()

@@ -167,6 +167,14 @@ html.no-glass body {
   background-image: none !important;
 }
 
+/* 移动端毛玻璃降半径：动态背景本就柔和，24px 与 10px 视觉几乎无差，
+   但每帧 backdrop-filter 重算成本随半径大幅上升，手机 GPU 扛不住 */
+@media (max-width: 767px) {
+  html:not(.no-glass) .backdrop-blur-xl {
+    --tw-backdrop-blur: blur(10px);
+  }
+}
+
 /* Dynamic hover blur transition on glass cards */
 @layer utilities {
   .glass-hover-blur {

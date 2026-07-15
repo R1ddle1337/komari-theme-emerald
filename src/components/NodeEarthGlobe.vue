@@ -86,12 +86,19 @@ function shouldKeepStaticRedraw(): boolean {
   return now < staticRedrawUntil
 }
 
-// 减少高采样导致的性能问题：按原生 DPR 渲染、上限 2。
+const isSmallScreen = typeof window !== 'undefined' && window.innerWidth < 768
+
+// 移动端 30fps 足够（装饰性自转），自转步长/跟随系数按帧率补偿保持视觉速度一致
+const GLOBE_FPS_LIMIT = isSmallScreen ? 30 : undefined
+const AUTO_ROTATE_STEP = isSmallScreen ? 0.006 : 0.003
+const ORIENTATION_LERP = isSmallScreen ? 0.22 : 0.12
+
+// 减少高采样导致的性能问题：按原生 DPR 渲染、上限 2（移动端 1.5）。
 // 之前强制最低 1.5 会让 DPR=1 的显示器每帧多画 2.25 倍像素（同上游 87cc17a）
 function getCappedDpr(): number {
   if (typeof window === 'undefined')
     return 1
-  return Math.min(window.devicePixelRatio || 1, 2)
+  return Math.min(window.devicePixelRatio || 1, isSmallScreen ? 1.5 : 2)
 }
 
 // 移动端降低 mapSamples 提升性能
@@ -393,7 +400,7 @@ const { pause: pauseRaf, resume: resumeRaf } = useRafFn(
     const prevTheta = theta
 
     if (!isPointerDown && shouldAutoRotate.value)
-      targetPhi += 0.003
+      targetPhi += AUTO_ROTATE_STEP
 
     // Apply inertia when not dragging and not auto-rotating
     if (!isPointerDown && !shouldAutoRotate.value) {
@@ -406,8 +413,8 @@ const { pause: pauseRaf, resume: resumeRaf } = useRafFn(
     }
 
     // Smooth lerp for fluid motion
-    phi += (targetPhi - phi) * 0.12
-    theta += (targetTheta - theta) * 0.12
+    phi += (targetPhi - phi) * ORIENTATION_LERP
+    theta += (targetTheta - theta) * ORIENTATION_LERP
     if (
       Math.abs(phi - prevPhi) < ORIENTATION_IDLE_EPSILON
       && Math.abs(theta - prevTheta) < ORIENTATION_IDLE_EPSILON
@@ -419,7 +426,7 @@ const { pause: pauseRaf, resume: resumeRaf } = useRafFn(
     }
     updateGlobeFrame()
   },
-  { immediate: false /* fpsLimit: 60 */ },
+  { immediate: false, fpsLimit: GLOBE_FPS_LIMIT },
 )
 
 function startGlobe() {

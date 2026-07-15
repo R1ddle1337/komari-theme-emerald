@@ -12,8 +12,8 @@ let startTime = 0
 let lastFrameTime = 0
 
 const isMobile = window.innerWidth < 768
-// Mobile: 24fps cap; Desktop: uncapped (60fps)
-const FRAME_INTERVAL = isMobile ? 1000 / 24 : 0
+// 移动端 24fps；桌面 60fps——高刷屏满帧跑重着色器纯浪费（同 ShaderBackground）
+const FRAME_INTERVAL = isMobile ? 1000 / 24 : 1000 / 60
 
 // Visibility-based pause
 const documentVisibility = useDocumentVisibility()

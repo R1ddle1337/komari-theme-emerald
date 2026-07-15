@@ -552,6 +552,14 @@ function getCustomTags(node: NodeData): Array<string> {
   filter: blur(2px);
 }
 
+/* 移动端进场不做 filter blur（同 HomeView 卡片过渡） */
+@media (max-width: 767px) {
+  .node-row-switch-enter-from,
+  .node-row-switch-leave-to {
+    filter: none;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .node-row-switch-enter-active,
   .node-row-switch-leave-active,
