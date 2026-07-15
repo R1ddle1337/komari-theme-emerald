@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { NodeData } from '@/stores/nodes'
 import { Icon } from '@iconify/vue'
+import { useMediaQuery } from '@vueuse/core'
 import { computed, ref } from 'vue'
 import NodePingListCell from '@/components/NodePingListCell.vue'
 import TrafficProgress from '@/components/TrafficProgress.vue'
@@ -43,6 +44,11 @@ const columns: ColumnConfig[] = [
   { key: 'traffic', label: '流量', width: 'minmax(120px, 1fr)', sortable: true },
   { key: 'rate', label: '速率', width: 'minmax(100px, 0.7fr)', sortable: true },
 ]
+
+// <768px 时表格改为移动端紧凑行布局，避免 9 列网格横向滚动
+const isDesktop = useMediaQuery('(min-width: 768px)')
+
+const sortableColumns = columns.filter(c => c.sortable)
 
 const sortKey = ref<string>('')
 const sortDir = ref<1 | -1>(1)
@@ -206,7 +212,7 @@ function getCustomTags(node: NodeData): Array<string> {
 </script>
 
 <template>
-  <div class="overflow-x-auto overflow-y-hidden min-w-0 p-1 -m-1">
+  <div v-if="isDesktop" class="overflow-x-auto overflow-y-hidden min-w-0 p-1 -m-1">
     <div class="min-w-fit w-full flex flex-col gap-1">
       <!-- 表头 -->
       <div class="grid p-2 backdrop-blur-xl backdrop-saturate-150 bg-background/40 rounded-lg ring-1 ring-foreground/[0.06] shadow-sm gap-2" :style="gridStyle">
@@ -409,9 +415,161 @@ function getCustomTags(node: NodeData): Array<string> {
       </TransitionGroup>
     </div>
   </div>
+
+  <!-- 移动端：紧凑行布局，全部信息纵向排布，无横向滚动 -->
+  <div v-else class="flex flex-col gap-2 min-w-0">
+    <!-- 排序 chips -->
+    <div class="sort-chips flex gap-1 overflow-x-auto">
+      <button
+        v-for="col in sortableColumns" :key="col.key" type="button"
+        class="shrink-0 h-6 px-2 rounded-md text-[11px] backdrop-blur-xl bg-background/40 ring-1 ring-foreground/[0.06] transition-colors"
+        :class="[sortKey === col.key ? 'text-green-600 bg-background/70' : 'text-muted-foreground']"
+        @click="handleSort(col)"
+      >
+        {{ col.label }}{{ sortKey === col.key ? (sortDir === 1 ? ' ↑' : ' ↓') : '' }}
+      </button>
+    </div>
+
+    <TransitionGroup
+      :appear="!appStore.disablePageAnimation"
+      :css="!appStore.disablePageAnimation"
+      name="node-row-switch"
+      tag="div"
+      class="flex flex-col gap-1.5"
+    >
+      <div
+        v-for="(node, index) in sortedNodes"
+        :key="getRowTransitionKey(node)"
+        class="relative p-2.5 cursor-pointer bg-background/30 rounded-lg backdrop-blur-xl shadow-[0_0_0_2px] shadow-transparent active:bg-background/60 transition-all"
+        :class="[!node.online && '!shadow-red-600/10']"
+        :style="getRowTransitionStyle(index)"
+        @click="handleClick(node)"
+      >
+        <div class="flex flex-col gap-1.5" :class="[!node.online && 'blur-sm opacity-30']">
+          <!-- 第一行：状态 + 旗帜 + 系统 + 名称 | 实时速率 -->
+          <div class="flex items-center gap-2 min-w-0">
+            <div class="size-2 rounded-full relative shrink-0" :class="[node.online ? 'bg-green-600' : 'bg-red-600']">
+              <div
+                class="animate-ping absolute inset-0 rounded-full opacity-50"
+                :class="[node.online ? 'bg-green-600' : 'bg-red-600']"
+              />
+            </div>
+            <img
+              v-if="hasRegion(node.region)" :src="getFlagSrc(node.region)"
+              :alt="getRegionDisplayName(node.region)" class="size-5 rounded-sm shrink-0"
+            >
+            <img :src="getOSImage(node.os)" :alt="getOSName(node.os)" class="size-4 shrink-0">
+            <span class="truncate text-xs font-semibold flex-1 min-w-0">{{ node.name }}</span>
+            <span class="text-[10px] shrink-0 flex items-center gap-1.5">
+              <span class="text-green-600 flex items-center gap-0.5">
+                <Icon icon="tabler:chevron-up" width="12" height="12" />
+                {{ formatBytesPerSecond(node.net_out ?? 0) }}
+              </span>
+              <span class="text-blue-600 flex items-center gap-0.5">
+                <Icon icon="tabler:chevron-down" width="12" height="12" />
+                {{ formatBytesPerSecond(node.net_in ?? 0) }}
+              </span>
+            </span>
+          </div>
+
+          <!-- 第二行：价格/自定义标签（有则显示） -->
+          <div
+            v-if="getPriceTags(node).length > 0 || getCustomTags(node).length > 0"
+            class="flex gap-1 items-center overflow-hidden whitespace-nowrap"
+          >
+            <span
+              v-for="(tag, tagIndex) in getPriceTags(node)" :key="`price-${tagIndex}`"
+              class="text-[11px] text-muted-foreground/70 shrink-0"
+            >
+              {{ tag }}
+            </span>
+            <Badge
+              v-for="(tag, tagIndex) in getCustomTags(node)" :key="`tag-${tagIndex}`" variant="outline"
+              class="!text-[10px] rounded text-muted-foreground border-muted-foreground/10 px-1 py-0 shrink-0"
+            >
+              {{ tag }}
+            </Badge>
+          </div>
+
+          <!-- 第三行：四个迷你仪表 -->
+          <div class="grid grid-cols-4 gap-2">
+            <div class="space-y-1 min-w-0">
+              <div class="text-[10px] text-muted-foreground flex items-center justify-between gap-1">
+                <span class="shrink-0">CPU</span>
+                <span class="truncate">{{ (node.cpu ?? 0).toFixed(0) }}%</span>
+              </div>
+              <ProgressThin :percentage="node.cpu ?? 0" :status="getStatus(node.cpu ?? 0)" :height="4" />
+            </div>
+            <div class="space-y-1 min-w-0">
+              <div class="text-[10px] text-muted-foreground flex items-center justify-between gap-1">
+                <span class="shrink-0">内存</span>
+                <span class="truncate">{{ ((node.ram ?? 0) / (node.mem_total || 1) * 100).toFixed(0) }}%</span>
+              </div>
+              <ProgressThin
+                :percentage="(node.ram ?? 0) / (node.mem_total || 1) * 100"
+                :status="getStatus((node.ram ?? 0) / (node.mem_total || 1) * 100)" :height="4"
+              />
+            </div>
+            <div class="space-y-1 min-w-0">
+              <div class="text-[10px] text-muted-foreground flex items-center justify-between gap-1">
+                <span class="shrink-0">硬盘</span>
+                <span class="truncate">{{ ((node.disk ?? 0) / (node.disk_total || 1) * 100).toFixed(0) }}%</span>
+              </div>
+              <ProgressThin
+                :percentage="(node.disk ?? 0) / (node.disk_total || 1) * 100"
+                :status="getStatus((node.disk ?? 0) / (node.disk_total || 1) * 100)" :height="4"
+              />
+            </div>
+            <div class="space-y-1 min-w-0">
+              <div class="text-[10px] text-muted-foreground flex items-center justify-between gap-1">
+                <span class="shrink-0">流量</span>
+                <span v-if="showTrafficProgress(node)" class="truncate">{{ getTrafficUsedPercentage(node).toFixed(0) }}%</span>
+                <span v-else class="truncate">{{ formatBytes(getTrafficUsed(node)) }}</span>
+              </div>
+              <TrafficProgress
+                :upload="node.net_total_up ?? 0" :download="node.net_total_down ?? 0"
+                :traffic-limit="node.traffic_limit" :traffic-limit-type="(node.traffic_limit_type || 'sum')"
+                height="4px"
+              />
+            </div>
+          </div>
+
+          <!-- 第四行：运行时间 + ping 诊断条 -->
+          <div class="flex items-center gap-2 min-w-0">
+            <span class="text-[10px] text-muted-foreground shrink-0">
+              {{ formatUptime(node.uptime ?? 0) }}
+            </span>
+            <div class="flex-1 min-w-0">
+              <NodePingListCell :uuid="node.uuid" :online="node.online" />
+            </div>
+          </div>
+        </div>
+
+        <div
+          v-if="!node.online" class="absolute inset-0 z-2 p-2 bg-background/10 rounded-lg flex flex-col items-center justify-center gap-0.5"
+          aria-hidden="true"
+        >
+          <div class="text-sm font-semibold truncate max-w-full">
+            <span class="text-red-500">离线</span> {{ node.name }}
+          </div>
+          <div class="text-xs text-muted-foreground">
+            {{ formatOfflineTime(node) }}
+          </div>
+        </div>
+      </div>
+    </TransitionGroup>
+  </div>
 </template>
 
 <style scoped>
+.sort-chips {
+  scrollbar-width: none;
+}
+
+.sort-chips::-webkit-scrollbar {
+  display: none;
+}
+
 .node-row-switch-enter-active,
 .node-row-switch-leave-active {
   transition:

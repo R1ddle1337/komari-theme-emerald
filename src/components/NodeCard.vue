@@ -106,7 +106,10 @@ function hasRegion(region: string | null | undefined): boolean {
   <CardX
     hoverable
     class="node-card w-full cursor-pointer backdrop-blur-xl backdrop-saturate-150 bg-background/40 border-none shadow-[0_0_0_3px] shadow-transparent hover:bg-background/60 hover:shadow-slate-500/10 transition-all duration-200 rounded-lg ring-1 ring-foreground/[0.06] glass-hover-blur"
-    :class="[!props.node.online && '!shadow-red-600/20']" @click="emit('click')"
+    :class="[!props.node.online && '!shadow-red-600/20']"
+    header-class="max-md:px-3 max-md:py-2.5"
+    content-class="max-md:p-3 max-md:pt-0"
+    @click="emit('click')"
   >
     <template #header>
       <div class="flex gap-2 min-w-0 items-center">
@@ -136,8 +139,8 @@ function hasRegion(region: string | null | undefined): boolean {
     </template>
 
     <template #default>
-      <div class="flex flex-col gap-3">
-        <div class="gap-3 grid grid-cols-2">
+      <div class="flex flex-col gap-3 max-md:gap-2">
+        <div class="gap-3 max-md:gap-x-3 max-md:gap-y-2 grid grid-cols-2">
           <!-- <div class="flex flex-col gap-1 col-span-2">
                 <div class="flex gap-2 items-center">
                   <img :src="getOSImage(props.node.os)" :alt="getOSName(props.node.os)" class="size-4">
@@ -267,19 +270,19 @@ function hasRegion(region: string | null | undefined): boolean {
           </div>
           <div
             v-if="priceTags.length" class="col-span-6 flex flex-row gap-0.5 p-1 pl-2 rounded-sm bg-slate-500/5 justify-center"
-            :class="[!props.node.online ? 'blur-xs opacity-60' : '']"
+            :class="[!props.node.online ? 'blur-xs opacity-60' : '', appStore.showNodeUptime ? 'max-md:col-span-3' : '']"
           >
-            <div class="text-[11px] text-muted-foreground flex flex-row gap-3">
-              <span v-for="(tag, index) in priceTags" :key="index">
+            <div class="text-[11px] text-muted-foreground flex flex-row gap-3 max-md:gap-1.5 max-md:flex-wrap max-md:justify-center overflow-hidden">
+              <span v-for="(tag, index) in priceTags" :key="index" class="whitespace-nowrap">
                 {{ tag }}
               </span>
             </div>
           </div>
-          <!-- 在线时长 -->
+          <!-- 在线时长（移动端与价格并排一行，省一行高度） -->
           <div
             v-if="appStore.showNodeUptime"
             class="col-span-6 flex flex-row gap-2 items-center p-1 rounded-sm bg-slate-500/5 justify-center text-[11px] text-muted-foreground"
-            :class="[!props.node.online ? 'blur-xs opacity-60' : '']"
+            :class="[!props.node.online ? 'blur-xs opacity-60' : '', priceTags.length ? 'max-md:col-span-3' : '']"
           >
             <Icon icon="tabler:clock-hour-4" width="12" height="12" />
             <span>{{ formatUptime(props.node.uptime ?? 0) }}</span>
