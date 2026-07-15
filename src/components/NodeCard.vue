@@ -2,6 +2,7 @@
 import type { NodeData } from '@/stores/nodes'
 import { Icon } from '@iconify/vue'
 import { computed } from 'vue'
+import PingBars from '@/components/PingBars.vue'
 import { Badge } from '@/components/ui/badge'
 import { CardX } from '@/components/ui/card-x'
 import { DataTooltip } from '@/components/ui/data-tooltip'
@@ -296,16 +297,8 @@ function hasRegion(region: string | null | undefined): boolean {
               <span class="text-muted-foreground">延迟</span>
               <span class="font-medium text-foreground/85">{{ latencyDisplay }}</span>
             </div>
-            <div
-              class="grid h-full items-end gap-[1px] opacity-80 group-hover/panel:opacity-100 cursor-auto"
-              :style="{ gridTemplateColumns: `repeat(${latencyRenderBars.length}, minmax(0, 1fr))` }"
-            >
-              <DataTooltip v-for="bar in latencyRenderBars" :key="bar.key" placement="top" :content="bar.tooltip" class="h-full w-full">
-                <span
-                  class="block h-full w-full rounded-[1px] transition-transform duration-150 group-hover/data-tooltip:scale-y-160 group-hover/panel:opacity-60 group-hover/data-tooltip:!opacity-100"
-                  :class="bar.className"
-                />
-              </DataTooltip>
+            <div class="h-full min-h-0 opacity-80 group-hover/panel:opacity-100">
+              <PingBars :bars="latencyRenderBars" />
             </div>
           </div>
           <!-- 丢包 -->
@@ -317,16 +310,8 @@ function hasRegion(region: string | null | undefined): boolean {
               <span class="text-muted-foreground">丢包</span>
               <span class="font-medium text-foreground/85">{{ lossDisplay }}</span>
             </div>
-            <div
-              class="grid h-full items-end gap-[1px] opacity-80 group-hover/panel:opacity-100 cursor-auto"
-              :style="{ gridTemplateColumns: `repeat(${lossRenderBars.length}, minmax(0, 1fr))` }"
-            >
-              <DataTooltip v-for="bar in lossRenderBars" :key="bar.key" placement="top" :content="bar.tooltip" class="h-full w-full">
-                <span
-                  class="block h-full w-full rounded-[1px] transition-transform duration-150 group-hover/data-tooltip:scale-y-160 group-hover/panel:opacity-60 group-hover/data-tooltip:!opacity-100"
-                  :class="bar.className"
-                />
-              </DataTooltip>
+            <div class="h-full min-h-0 opacity-80 group-hover/panel:opacity-100">
+              <PingBars :bars="lossRenderBars" />
             </div>
           </div>
         </div>

@@ -167,6 +167,30 @@ async function fetchJson<T>(url: string, timeoutMs: number): Promise<T> {
   }
 }
 
+// 同一会话内地理信息不会变，缓存后刷新页面零外部请求
+const GEO_CACHE_KEY = 'emerald-visitor-geo-v1'
+
+function readGeoCache(): VisitorGeoData | null {
+  try {
+    const raw = sessionStorage.getItem(GEO_CACHE_KEY)
+    if (!raw)
+      return null
+    const data = JSON.parse(raw) as VisitorGeoData
+    return data.ip ? data : null
+  }
+  catch {
+    return null
+  }
+}
+
+function writeGeoCache(data: VisitorGeoData): void {
+  try {
+    sessionStorage.setItem(GEO_CACHE_KEY, JSON.stringify(data))
+  }
+  catch {
+  }
+}
+
 // 用浏览器内置 Intl 把国家代码转成中文名（地理源返回的是英文）
 function localizeCountry(code: string | undefined, fallback: string | undefined): string {
   if (code) {
@@ -316,7 +340,10 @@ onMounted(async () => {
   browser.value = client.browser
   visitTime.value = formatVisitTime(new Date())
 
-  const geo = await fetchVisitorGeo()
+  const cached = readGeoCache()
+  const geo = cached ?? await fetchVisitorGeo()
+  if (!cached && geo)
+    writeGeoCache(geo)
   if (geo) {
     ip.value = geo.ip
     isp.value = geo.isp
