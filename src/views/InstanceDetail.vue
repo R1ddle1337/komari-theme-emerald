@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { CurrencyCode } from '@/utils/financeHelper'
 import { Icon } from '@iconify/vue'
-import { computed, defineAsyncComponent, onMounted, ref } from 'vue'
+import { computed, defineAsyncComponent, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -11,6 +11,7 @@ import { useAppStore } from '@/stores/app'
 import { useNodesStore } from '@/stores/nodes'
 import * as financeHelper from '@/utils/financeHelper'
 import { formatBytesPerSecondWithConfig, formatBytesWithConfig, formatDateTime, formatUptimeWithFormat } from '@/utils/helper'
+import { applyOfflineLast, applyPinnedFirst } from '@/utils/nodeSortHelper'
 import { getOSImage, getOSName } from '@/utils/osImageHelper'
 import { getRegionCode, getRegionDisplayName } from '@/utils/regionHelper'
 import { getBillingCycleText, getExpireStatus, getExpireText } from '@/utils/tagHelper'
@@ -39,6 +40,39 @@ const formatBytesPerSecond = (bytes: number) => formatBytesPerSecondWithConfig(b
 const formatUptime = (seconds: number) => formatUptimeWithFormat(seconds, 'minute')
 
 const data = computed(() => nodesStore.nodes.find(node => node.uuid === route.params.id))
+
+// 上一台/下一台：顺序与首页默认一致（置顶在前、离线垫底）
+const orderedNodes = computed(() => applyOfflineLast(applyPinnedFirst([...nodesStore.nodes], appStore.pinnedNodes)))
+const currentIndex = computed(() => orderedNodes.value.findIndex(node => node.uuid === route.params.id))
+const prevNode = computed(() => currentIndex.value > 0 ? orderedNodes.value[currentIndex.value - 1] : null)
+const nextNode = computed(() => currentIndex.value > -1 && currentIndex.value < orderedNodes.value.length - 1
+  ? orderedNodes.value[currentIndex.value + 1]
+  : null)
+
+function switchNode(node: { uuid: string } | null | undefined) {
+  if (node)
+    router.replace({ name: 'instance-detail', params: { id: node.uuid } })
+}
+
+function handleKeydown(e: KeyboardEvent) {
+  if (e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey)
+    return
+  const target = e.target as HTMLElement | null
+  if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable))
+    return
+  if (e.key === 'ArrowLeft')
+    switchNode(prevNode.value)
+  else if (e.key === 'ArrowRight')
+    switchNode(nextNode.value)
+}
+
+onMounted(() => window.addEventListener('keydown', handleKeydown))
+onUnmounted(() => window.removeEventListener('keydown', handleKeydown))
+
+// 组件在同路由不同参数间复用，切换节点时回到顶部
+watch(() => route.params.id, () => {
+  window.scrollTo({ top: 0, behavior: 'instant' })
+})
 
 interface InfoItem {
   label: string
@@ -272,6 +306,25 @@ const trafficProgressStyle = computed(() => ({
         <Badge :variant="data.online ? 'default' : 'destructive'" class="text-xs !rounded">
           {{ data.online ? '在线' : '离线' }}
         </Badge>
+        <div class="ml-auto flex items-center gap-1">
+          <span v-if="currentIndex > -1" class="text-xs text-muted-foreground mr-1">
+            {{ currentIndex + 1 }} / {{ orderedNodes.length }}
+          </span>
+          <Button
+            variant="ghost" size="icon-sm" class="bg-background/50 hover:bg-background"
+            :disabled="!prevNode" :title="prevNode ? `上一台：${prevNode.name}（←）` : '已是第一台'"
+            @click="switchNode(prevNode)"
+          >
+            <Icon icon="tabler:chevron-left" :width="16" :height="16" />
+          </Button>
+          <Button
+            variant="ghost" size="icon-sm" class="bg-background/50 hover:bg-background"
+            :disabled="!nextNode" :title="nextNode ? `下一台：${nextNode.name}（→）` : '已是最后一台'"
+            @click="switchNode(nextNode)"
+          >
+            <Icon icon="tabler:chevron-right" :width="16" :height="16" />
+          </Button>
+        </div>
       </div>
 
       <div class="px-4 grid grid-cols-2 gap-4 lg:grid-cols-4">
@@ -408,8 +461,8 @@ const trafficProgressStyle = computed(() => ({
         </CardX>
       </div>
 
-      <LoadChart :uuid="data.uuid" class="px-4" />
-      <PingChart :uuid="data.uuid" class="px-4" />
+      <LoadChart :key="data.uuid" :uuid="data.uuid" class="px-4" />
+      <PingChart :key="data.uuid" :uuid="data.uuid" class="px-4" />
     </template>
   </div>
 </template>

@@ -42,16 +42,16 @@ onDeactivated(() => {
   appStore.homeScrollPosition = window.scrollY
 })
 
-const searchText = ref('')
+// 搜索词在 appStore（标签点击筛选需要跨组件写入）
 const debouncedSearchText = ref('')
 
 const updateDebouncedSearch = useDebounceFn((value: string) => {
   debouncedSearchText.value = value
 }, 300)
 
-watch(searchText, (value) => {
+watch(() => appStore.nodeSearchText, (value) => {
   updateDebouncedSearch(value)
-})
+}, { immediate: true })
 
 const groups = computed(() => [
   { tab: '全部节点', name: 'all', count: nodesStore.nodes.length },
@@ -148,6 +148,11 @@ function handleCardSort(key: string) {
   }
 }
 
+// 紧凑密度下收窄卡片最小宽度，同屏多排一列
+const cardGridMinWidth = computed(() =>
+  appStore.cardDensity === 'compact' ? Math.min(appStore.nodeCardMinWidth, 250) : appStore.nodeCardMinWidth,
+)
+
 const nodeList = computed(() => {
   let filtered = groupNodeList.value
   if (debouncedSearchText.value.trim()) {
@@ -175,13 +180,6 @@ function getNodeItemTransitionStyle(index: number): Record<string, string> {
 
 <template>
   <div class="home-view">
-    <div v-if="appStore.connectionError" class="alert px-4">
-      <Alert variant="destructive" class="border-none backdrop-blur-xl backdrop-saturate-150 bg-red-400/10 rounded-lg ring-1 ring-red-500/[0.1]">
-        <AlertTitle>RPC 服务错误</AlertTitle>
-        <AlertDescription>连接服务器失败，请检查网络设置或刷新页面后再试。</AlertDescription>
-      </Alert>
-    </div>
-
     <div v-if="appStore.alertEnabled && appStore.alertContent" class="alert px-4">
       <Alert class="border-none backdrop-blur-xl backdrop-saturate-150 bg-background/40 rounded-lg ring-1 ring-foreground/[0.06] shadow-sm">
         <AlertTitle v-if="appStore.alertTitle">
@@ -234,16 +232,34 @@ function getNodeItemTransitionStyle(index: number): Record<string, string> {
               >
                 <Icon icon="tabler:table" :width="14" :height="14" />
               </Button>
+              <Button
+                v-if="appStore.nodeViewMode === 'card'"
+                variant="outline" size="icon"
+                :aria-label="appStore.cardDensity === 'compact' ? '切换为舒适密度' : '切换为紧凑密度'"
+                class="w-8 h-8 border-none backdrop-blur-xl backdrop-saturate-150 bg-background/40 shadow-none hover:bg-background/60 rounded-lg ring-1 ring-foreground/[0.06]"
+                :class="[appStore.cardDensity === 'compact' ? '!text-green-600 !bg-background' : '']"
+                @click="appStore.toggleCardDensity()"
+              >
+                <Icon :icon="appStore.cardDensity === 'compact' ? 'tabler:baseline-density-small' : 'tabler:baseline-density-medium'" :width="14" :height="14" />
+              </Button>
               <div class="relative z-1 w-8 h-8">
                 <div class="absolute top-0 right-0 ">
                   <Input
-                    v-model="searchText" placeholder="搜索节点名称、地区、系统"
+                    v-model="appStore.nodeSearchText" placeholder="搜索节点名称、地区、系统"
                     class="transition-all placeholder:text-transparent border-none shadow-none w-8 h-8 backdrop-blur-xl backdrop-saturate-150 bg-background/40 rounded-lg ring-1 ring-foreground/[0.06] hover:!bg-background/60 focus:!w-60 focus:!pl-7.5 focus:placeholder:!text-muted-foreground focus:!bg-background/60 focus:!ring-foreground/[0.1]"
+                    :class="[appStore.nodeSearchText ? '!w-60 !pl-7.5 !pr-7 !bg-background/60' : '']"
                   />
                   <Icon
                     icon="tabler:search" :width="14" :height="14"
                     class="absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none"
                   />
+                  <button
+                    v-if="appStore.nodeSearchText" type="button" aria-label="清除搜索"
+                    class="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    @click="appStore.nodeSearchText = ''"
+                  >
+                    <Icon icon="tabler:x" :width="13" :height="13" />
+                  </button>
                 </div>
               </div>
             </div>
@@ -266,8 +282,9 @@ function getNodeItemTransitionStyle(index: number): Record<string, string> {
               :css="!appStore.disablePageAnimation"
               name="node-card-switch"
               tag="div"
-              class="gap-3 grid grid-cols-1"
-              :style="{ gridTemplateColumns: `repeat(auto-fill, minmax(min(${appStore.nodeCardMinWidth}px, 100%), 1fr))` }"
+              class="grid grid-cols-1"
+              :class="appStore.cardDensity === 'compact' ? 'gap-2' : 'gap-3'"
+              :style="{ gridTemplateColumns: `repeat(auto-fill, minmax(min(${cardGridMinWidth}px, 100%), 1fr))` }"
             >
               <div
                 v-for="(node, index) in nodeList"

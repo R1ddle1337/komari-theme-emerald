@@ -74,6 +74,11 @@ onBeforeUnmount(() => {
 const actionButtons = computed(() => {
   const buttons = [
     {
+      title: appStore.offlineNotifyEnabled ? '掉线通知：已开启' : '掉线通知：已关闭',
+      icon: appStore.offlineNotifyEnabled ? 'icon-park-outline:remind' : 'icon-park-outline:close-remind',
+      action: 'toggleOfflineNotify',
+    },
+    {
       title: appStore.themeMode === 'auto' ? '自动主题' : appStore.themeMode === 'light' ? '浅色主题' : '深色主题',
       icon: appStore.themeMode === 'auto' ? 'icon-park-outline:dark-mode' : appStore.themeMode === 'light' ? 'icon-park-outline:sun-one' : 'icon-park-outline:moon',
       action: 'toggleTheme',
@@ -90,10 +95,34 @@ const actionButtons = computed(() => {
   return buttons
 })
 
+async function toggleOfflineNotify() {
+  if (appStore.offlineNotifyEnabled) {
+    appStore.offlineNotifyEnabled = false
+    window.$message?.info('已关闭掉线通知')
+    return
+  }
+  if (typeof Notification === 'undefined') {
+    window.$message?.error('当前浏览器不支持桌面通知')
+    return
+  }
+  let permission = Notification.permission
+  if (permission === 'default')
+    permission = await Notification.requestPermission()
+  if (permission !== 'granted') {
+    window.$message?.warning('通知权限被拒绝，请在浏览器站点设置中允许通知')
+    return
+  }
+  appStore.offlineNotifyEnabled = true
+  window.$message?.success('已开启掉线通知：节点离线/恢复时会收到桌面提醒')
+}
+
 function handleButtonClick(action: string) {
   switch (action) {
     case 'toggleTheme':
       appStore.updateThemeMode()
+      break
+    case 'toggleOfflineNotify':
+      toggleOfflineNotify()
       break
     case 'jumpToSetting':
       location.href = '/admin'
@@ -135,7 +164,7 @@ const sitename = computed(() => appStore.publicSettings?.sitename || 'Komari Mon
 
           <Tooltip v-for="button in actionButtons" :key="button.action">
             <TooltipTrigger as-child>
-              <Button variant="ghost" size="icon-sm" @click="handleButtonClick(button.action)">
+              <Button variant="ghost" size="icon-sm" :aria-label="button.title" @click="handleButtonClick(button.action)">
                 <Icon :icon="button.icon" :width="18" :height="18" />
               </Button>
             </TooltipTrigger>

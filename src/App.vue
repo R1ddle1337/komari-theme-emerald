@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { nextTick, onMounted, onUnmounted, ref, watchEffect } from 'vue'
+import { nextTick, onMounted, onUnmounted, ref, watch, watchEffect } from 'vue'
 import { Toaster } from '@/components/ui/sonner'
 import { useAppStore } from '@/stores/app'
 import { useNodesStore } from '@/stores/nodes'
 import { destroyInitManager, initApp } from '@/utils/init'
 import { initPerfTier } from '@/utils/perfTier'
 import Background from './components/Background.vue'
+import ConnectionBanner from './components/ConnectionBanner.vue'
 import Footer from './components/Footer.vue'
 import Header from './components/Header.vue'
 import LoadingCover from './components/LoadingCover.vue'
@@ -19,6 +20,43 @@ const isReady = ref(false)
 watchEffect(() => {
   document.documentElement.classList.toggle('no-glass', !appStore.enableGlassEffect)
 })
+
+// 节点掉线/恢复浏览器通知：首个非空快照只记录基线不通知
+const lastOnlineState = new Map<string, boolean>()
+let onlineStateSeeded = false
+
+watch(
+  () => nodesStore.nodes.map(node => `${node.uuid}:${node.online ? 1 : 0}`).join(','),
+  () => {
+    const nodes = nodesStore.nodes
+    if (!onlineStateSeeded) {
+      if (!nodes.length)
+        return
+      for (const node of nodes)
+        lastOnlineState.set(node.uuid, node.online)
+      onlineStateSeeded = true
+      return
+    }
+    const canNotify = appStore.offlineNotifyEnabled
+      && typeof Notification !== 'undefined'
+      && Notification.permission === 'granted'
+    for (const node of nodes) {
+      const prev = lastOnlineState.get(node.uuid)
+      if (prev !== undefined && prev !== node.online && canNotify) {
+        // eslint-disable-next-line no-new
+        new Notification(
+          node.online ? `${node.name} 已恢复在线` : `${node.name} 已离线`,
+          {
+            body: `${appStore.publicSettings?.sitename || 'Komari Monitor'} · ${new Date().toLocaleTimeString()}`,
+            icon: '/favicon.ico',
+            tag: `komari-node-${node.uuid}`,
+          },
+        )
+      }
+      lastOnlineState.set(node.uuid, node.online)
+    }
+  },
+)
 
 // 浏览器标题实时显示在线数
 watchEffect(() => {
@@ -70,6 +108,7 @@ onUnmounted(() => {
       <LoadingCover v-if="appStore.loading" />
     </Transition>
     <Header />
+    <ConnectionBanner />
     <main v-if="!appStore.loading" class="relative z-10 min-h-screen overflow-hidden">
       <div class="max-w-[1280px] mx-auto">
         <RouterView v-slot="{ Component }">

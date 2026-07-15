@@ -85,6 +85,13 @@ const offlineRelative = computed(() => formatRelativeTime(props.node.time))
 
 const customTags = computed(() => parseTags(props.node.tags).map(t => t.text))
 
+const isCompact = computed(() => appStore.cardDensity === 'compact')
+
+// 点标签直接筛选同标签节点（再点一次取消）
+function filterByTag(tag: string) {
+  appStore.nodeSearchText = appStore.nodeSearchText === tag ? '' : tag
+}
+
 function hasRegion(region: string | null | undefined): boolean {
   return Boolean(region?.trim())
 }
@@ -95,8 +102,8 @@ function hasRegion(region: string | null | undefined): boolean {
     hoverable
     class="node-card w-full cursor-pointer backdrop-blur-xl backdrop-saturate-150 bg-background/40 border-none shadow-[0_0_0_3px] shadow-transparent hover:bg-background/60 hover:shadow-slate-500/10 transition-all duration-200 rounded-lg ring-1 ring-foreground/[0.06] glass-hover-blur"
     :class="[!props.node.online && '!shadow-red-600/20']"
-    header-class="max-md:px-3 max-md:py-2.5"
-    content-class="max-md:p-3 max-md:pt-0"
+    :header-class="`max-md:px-3 max-md:py-2.5 ${isCompact ? 'md:px-3 md:py-2' : ''}`"
+    :content-class="`max-md:p-3 max-md:pt-0 ${isCompact ? 'md:p-3 md:pt-0' : ''}`"
     @click="emit('click')"
   >
     <template #header>
@@ -135,8 +142,8 @@ function hasRegion(region: string | null | undefined): boolean {
     </template>
 
     <template #default>
-      <div class="flex flex-col gap-3 max-md:gap-2">
-        <div class="gap-3 max-md:gap-x-3 max-md:gap-y-2 grid grid-cols-2">
+      <div class="flex flex-col gap-3 max-md:gap-2" :class="isCompact && 'md:gap-2'">
+        <div class="gap-3 max-md:gap-x-3 max-md:gap-y-2 grid grid-cols-2" :class="isCompact && 'md:gap-x-3 md:gap-y-2'">
           <!-- <div class="flex flex-col gap-1 col-span-2">
                 <div class="flex gap-2 items-center">
                   <img :src="getOSImage(props.node.os)" :alt="getOSName(props.node.os)" class="size-4">
@@ -316,7 +323,9 @@ function hasRegion(region: string | null | undefined): boolean {
         <div v-if="customTags.length > 0" class="flex shrink-0 flex-wrap gap-1 items-center">
           <Badge
             v-for="(tag, index) in customTags" :key="index" variant="outline"
-            class="!text-[11px] rounded text-muted-foreground border-muted-foreground/10 px-1.5"
+            class="!text-[11px] rounded text-muted-foreground border-muted-foreground/10 px-1.5 cursor-pointer transition-colors hover:text-foreground hover:border-muted-foreground/30"
+            :title="`筛选标签：${tag}`"
+            @click.stop="filterByTag(tag)"
           >
             {{ tag }}
           </Badge>

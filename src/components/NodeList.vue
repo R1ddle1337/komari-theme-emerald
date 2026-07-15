@@ -51,11 +51,17 @@ const isDesktop = useMediaQuery('(min-width: 768px)')
 
 const sortableColumns = columns.filter(c => c.sortable)
 
+// 移动端排序 chips：数据列之外补一个"到期"（桌面表头没有对应列）
+const mobileSortOptions: Pick<ColumnConfig, 'key' | 'label'>[] = [
+  ...sortableColumns.map(c => ({ key: c.key, label: c.label })),
+  { key: 'expired', label: '到期' },
+]
+
 const sortKey = ref<string>('')
 const sortDir = ref<1 | -1>(1)
 
-function handleSort(col: ColumnConfig) {
-  if (!col.sortable)
+function handleSort(col: Pick<ColumnConfig, 'key' | 'label'> & { sortable?: boolean }) {
+  if (col.sortable === false)
     return
   if (sortKey.value === col.key) {
     sortDir.value = sortDir.value === 1 ? -1 : 1
@@ -167,6 +173,11 @@ function togglePin(node: NodeData) {
 function getCustomTags(node: NodeData): Array<string> {
   return parseTags(node.tags).map(t => t.text)
 }
+
+// 点标签直接筛选同标签节点（再点一次取消）
+function filterByTag(tag: string) {
+  appStore.nodeSearchText = appStore.nodeSearchText === tag ? '' : tag
+}
 </script>
 
 <template>
@@ -244,7 +255,9 @@ function getCustomTags(node: NodeData): Array<string> {
                   </span>
                   <Badge
                     v-for="(tag, tagIndex) in getCustomTags(node)" :key="`tag-${tagIndex}`" variant="outline"
-                    class="!text-[10px] rounded text-muted-foreground border-muted-foreground/10 px-1 py-0 shrink-0"
+                    class="!text-[10px] rounded text-muted-foreground border-muted-foreground/10 px-1 py-0 shrink-0 cursor-pointer transition-colors hover:text-foreground hover:border-muted-foreground/30"
+                    :title="`筛选标签：${tag}`"
+                    @click.stop="filterByTag(tag)"
                   >
                     {{ tag }}
                   </Badge>
@@ -390,7 +403,7 @@ function getCustomTags(node: NodeData): Array<string> {
     <!-- 排序 chips -->
     <div class="sort-chips flex gap-1 overflow-x-auto">
       <button
-        v-for="col in sortableColumns" :key="col.key" type="button"
+        v-for="col in mobileSortOptions" :key="col.key" type="button"
         class="shrink-0 h-6 px-2 rounded-md text-[11px] backdrop-blur-xl bg-background/40 ring-1 ring-foreground/[0.06] transition-colors"
         :class="[sortKey === col.key ? 'text-green-600 bg-background/70' : 'text-muted-foreground']"
         @click="handleSort(col)"
@@ -463,7 +476,9 @@ function getCustomTags(node: NodeData): Array<string> {
             </span>
             <Badge
               v-for="(tag, tagIndex) in getCustomTags(node)" :key="`tag-${tagIndex}`" variant="outline"
-              class="!text-[10px] rounded text-muted-foreground border-muted-foreground/10 px-1 py-0 shrink-0"
+              class="!text-[10px] rounded text-muted-foreground border-muted-foreground/10 px-1 py-0 shrink-0 cursor-pointer transition-colors hover:text-foreground hover:border-muted-foreground/30"
+              :title="`筛选标签：${tag}`"
+              @click.stop="filterByTag(tag)"
             >
               {{ tag }}
             </Badge>

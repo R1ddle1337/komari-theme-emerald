@@ -56,6 +56,19 @@ const useAppStore = defineStore('app', () => {
     return pinnedNodes.value.includes(uuid)
   }
 
+  // 首页节点搜索词（放 store 供标签点击筛选等跨组件写入）
+  const nodeSearchText = ref('')
+
+  // 卡片视图密度
+  const cardDensity = useStorageAsync<'comfortable' | 'compact'>('cardDensity', 'comfortable', localStorage)
+
+  function toggleCardDensity() {
+    cardDensity.value = cardDensity.value === 'compact' ? 'comfortable' : 'compact'
+  }
+
+  // 节点掉线浏览器通知开关
+  const offlineNotifyEnabled = useStorageAsync<boolean>('offlineNotifyEnabled', false, localStorage)
+
   // 首页滚动位置记忆
   const homeScrollPosition = ref<number>(0)
 
@@ -403,6 +416,10 @@ const useAppStore = defineStore('app', () => {
     pinnedNodes,
     togglePinnedNode,
     isNodePinned,
+    nodeSearchText,
+    cardDensity,
+    toggleCardDensity,
+    offlineNotifyEnabled,
     defaultViewMode,
     rpcTransportMode,
     byteDecimals,

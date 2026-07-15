@@ -14,7 +14,22 @@ export const NODE_SORT_OPTIONS: NodeSortOption[] = [
   { key: 'disk', label: '硬盘' },
   { key: 'traffic', label: '流量' },
   { key: 'rate', label: '速率' },
+  { key: 'expired', label: '到期' },
 ]
+
+// 到期排序值：毫秒时间戳；未设置/非法/零值时间（Komari 未配置时为 0001-01-01）/长期视为无到期，恒排最后
+const EXPIRE_RANGE_MS = 36500 * 86400000
+function getExpirySortValue(node: NodeData): number | null {
+  if (!node.expired_at)
+    return null
+  const ms = new Date(node.expired_at).getTime()
+  if (!Number.isFinite(ms))
+    return null
+  const now = Date.now()
+  if (ms < now - EXPIRE_RANGE_MS || ms > now + EXPIRE_RANGE_MS)
+    return null
+  return ms
+}
 
 // 离线节点固定排在最后（组内保持原有顺序），任何排序/置顶之后最外层套用
 export function applyOfflineLast(nodes: NodeData[]): NodeData[] {
@@ -77,6 +92,14 @@ export function sortNodes(nodes: NodeData[], key: string, dir: 1 | -1): NodeData
       case 'disk': return dir * ((a.disk ?? 0) / (a.disk_total || 1) - (b.disk ?? 0) / (b.disk_total || 1))
       case 'traffic':
         return dir * (getTrafficUsed(a) - getTrafficUsed(b))
+      case 'expired': {
+        const va = getExpirySortValue(a)
+        const vb = getExpirySortValue(b)
+        // 无到期的节点不参与正反向，恒排最后
+        if (va === null || vb === null)
+          return va === vb ? 0 : va === null ? 1 : -1
+        return dir * (va - vb)
+      }
       case 'rate':
         return dir * (((a.net_out ?? 0) + (a.net_in ?? 0)) - ((b.net_out ?? 0) + (b.net_in ?? 0)))
       default: return 0
