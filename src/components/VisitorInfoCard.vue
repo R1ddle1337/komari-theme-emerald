@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Icon } from '@iconify/vue'
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 
 interface VisitorGeoData {
   ip: string
@@ -135,8 +135,28 @@ function detectClient(): VisitorClientData {
   }
 }
 
+const requests = new Set<AbortController>()
+let disposed = false
+let geoDeadline = 0
+let startTimer: number | undefined
+
+onBeforeUnmount(() => {
+  disposed = true
+  window.clearTimeout(startTimer)
+  requests.forEach(controller => controller.abort())
+})
+
+function remainingBudget(timeoutMs: number): number {
+  const remaining = geoDeadline - Date.now()
+  if (disposed || remaining <= 0)
+    throw new Error('Visitor lookup finished')
+  return Math.min(timeoutMs, remaining)
+}
+
 async function fetchText(url: string, timeoutMs: number): Promise<string> {
+  timeoutMs = remainingBudget(timeoutMs)
   const controller = new AbortController()
+  requests.add(controller)
   const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs)
 
   try {
@@ -148,11 +168,14 @@ async function fetchText(url: string, timeoutMs: number): Promise<string> {
   }
   finally {
     window.clearTimeout(timeoutId)
+    requests.delete(controller)
   }
 }
 
 async function fetchJson<T>(url: string, timeoutMs: number): Promise<T> {
+  timeoutMs = remainingBudget(timeoutMs)
   const controller = new AbortController()
+  requests.add(controller)
   const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs)
 
   try {
@@ -164,19 +187,25 @@ async function fetchJson<T>(url: string, timeoutMs: number): Promise<T> {
   }
   finally {
     window.clearTimeout(timeoutId)
+    requests.delete(controller)
   }
 }
 
-// 同一会话内地理信息不会变，缓存后刷新页面零外部请求
-const GEO_CACHE_KEY = 'emerald-visitor-geo-v1'
+// 短时会话缓存避免重复请求，同时允许切换网络后重新识别。
+const GEO_CACHE_KEY = 'emerald-visitor-geo-v2'
 
 function readGeoCache(): VisitorGeoData | null {
   try {
     const raw = sessionStorage.getItem(GEO_CACHE_KEY)
     if (!raw)
       return null
-    const data = JSON.parse(raw) as VisitorGeoData
-    return data.ip ? data : null
+    const cached = JSON.parse(raw) as { data?: VisitorGeoData, savedAt?: number }
+    const data = cached.data
+    return cached.savedAt && Date.now() - cached.savedAt < 15 * 60 * 1000
+      && data && ['ip', 'isp', 'location', 'countryCode'].every(key => typeof data[key as keyof VisitorGeoData] === 'string')
+      && data.ip
+      ? data
+      : null
   }
   catch {
     return null
@@ -185,7 +214,7 @@ function readGeoCache(): VisitorGeoData | null {
 
 function writeGeoCache(data: VisitorGeoData): void {
   try {
-    sessionStorage.setItem(GEO_CACHE_KEY, JSON.stringify(data))
+    sessionStorage.setItem(GEO_CACHE_KEY, JSON.stringify({ data, savedAt: Date.now() }))
   }
   catch {
   }
@@ -217,6 +246,7 @@ function parseCfTrace(text: string): Record<string, string> {
 }
 
 async function fetchVisitorGeo(): Promise<VisitorGeoData | null> {
+  geoDeadline = Date.now() + 7000
   // Step 1: Get real outbound IP via services that require proxy in China
   let cfIp = ''
   let cfCountryCode = ''
@@ -224,17 +254,17 @@ async function fetchVisitorGeo(): Promise<VisitorGeoData | null> {
   const ipSources = [
     async () => {
       // ipify - blocked in China, must go through proxy
-      const text = await fetchText('https://api.ipify.org', 3000)
+      const text = await fetchText('https://api.ipify.org', 1500)
       return { ip: text.trim(), loc: '' }
     },
     async () => {
       // Cloudflare trace - returns ip + country code
-      const traceText = await fetchText('https://1.1.1.1/cdn-cgi/trace', 3000)
+      const traceText = await fetchText('https://1.1.1.1/cdn-cgi/trace', 1500)
       const trace = parseCfTrace(traceText)
       return { ip: trace.ip || '', loc: (trace.loc || '').toUpperCase() }
     },
     async () => {
-      const traceText = await fetchText('https://www.cloudflare.com/cdn-cgi/trace', 3000)
+      const traceText = await fetchText('https://www.cloudflare.com/cdn-cgi/trace', 1500)
       const trace = parseCfTrace(traceText)
       return { ip: trace.ip || '', loc: (trace.loc || '').toUpperCase() }
     },
@@ -266,7 +296,7 @@ async function fetchVisitorGeo(): Promise<VisitorGeoData | null> {
         region?: string
         city?: string
         connection?: { isp?: string, org?: string }
-      }>(url, 4000)
+      }>(url, 2000)
 
       if (!data.success || !data.ip) {
         throw new Error('ipwho.is unavailable')
@@ -292,7 +322,7 @@ async function fetchVisitorGeo(): Promise<VisitorGeoData | null> {
         country_code?: string
         region?: string
         city?: string
-      }>(url, 4000)
+      }>(url, 2000)
 
       if (data.error || !data.ip) {
         throw new Error(data.reason || 'ipapi unavailable')
@@ -334,15 +364,28 @@ function handleFlagError(): void {
   flagVisible.value = false
 }
 
-onMounted(async () => {
+onMounted(() => {
   const client = detectClient()
   device.value = client.device
   browser.value = client.browser
   visitTime.value = formatVisitTime(new Date())
 
   const cached = readGeoCache()
-  const geo = cached ?? await fetchVisitorGeo()
-  if (!cached && geo)
+  if (cached) {
+    applyGeo(cached, false)
+  }
+  else {
+    // Let the node list render before starting optional visitor lookups.
+    startTimer = window.setTimeout(async () => {
+      const geo = await fetchVisitorGeo()
+      if (!disposed)
+        applyGeo(geo)
+    }, 500)
+  }
+})
+
+function applyGeo(geo: VisitorGeoData | null, cache = true) {
+  if (geo && cache)
     writeGeoCache(geo)
   if (geo) {
     ip.value = geo.ip
@@ -357,14 +400,17 @@ onMounted(async () => {
   }
 
   loading.value = false
-})
+}
 </script>
 
 <template>
   <div class="fixed inset-x-0 bottom-2.5 z-30 flex justify-center">
     <div
-      class="bg-background/30 p-1.5 px-3 shadow-[-1px_-1px_0_background,0_0_16px_rgba(0,0,0,0.05)] backdrop-blur-xl backdrop-saturate-150 ring-1 ring-foreground/[0.06] transition-[border-radius,transform,background-color,box-shadow] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]"
+      class="focus-visible:outline-2 focus-visible:outline-emerald-500 bg-background/30 p-1.5 px-3 shadow-[-1px_-1px_0_background,0_0_16px_rgba(0,0,0,0.05)] backdrop-blur-xl backdrop-saturate-150 ring-1 ring-foreground/[0.06] transition-[border-radius,transform,background-color,box-shadow] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]"
       :class="[expand ? 'rounded-lg -translate-y-1 bg-background/38 shadow-[-1px_-1px_0_background,0_10px_28px_rgba(0,0,0,0.08)]' : 'rounded-xl']"
+      role="button" tabindex="0" aria-label="访客信息" :aria-expanded="expand"
+      @keydown.enter.prevent="expand = !expand"
+      @keydown.space.prevent="expand = !expand"
       @click="expand = !expand"
     >
       <TransitionGroup

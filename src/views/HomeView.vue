@@ -1,6 +1,7 @@
 <script setup lang="ts">
+import type { NodeHealthFilter } from '@/utils/nodeHealth'
 import { Icon } from '@iconify/vue'
-import { useDebounceFn } from '@vueuse/core'
+import { useDebounceFn, useNow } from '@vueuse/core'
 import { computed, defineAsyncComponent, nextTick, onActivated, onDeactivated, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import MarkdownRenderer from '@/components/MarkdownRenderer.vue'
@@ -13,6 +14,7 @@ import { useAppStore } from '@/stores/app'
 import { useNodesStore } from '@/stores/nodes'
 import { getCountryCodeFromRegion } from '@/utils/geoHelper'
 import { isNodeInGroup, parseNodeGroups } from '@/utils/groupHelper'
+import { matchesNodeHealth, NODE_HEALTH_FILTERS } from '@/utils/nodeHealth'
 import { applyOfflineLast, applyPinnedFirst, NODE_SORT_OPTIONS, sortNodes } from '@/utils/nodeSortHelper'
 import { getRegionDisplayName, isRegionMatch } from '@/utils/regionHelper'
 
@@ -153,11 +155,16 @@ const cardGridMinWidth = computed(() =>
   appStore.cardDensity === 'compact' ? Math.min(appStore.nodeCardMinWidth, 250) : appStore.nodeCardMinWidth,
 )
 
+const healthFilter = ref<NodeHealthFilter>('all')
+const now = useNow({ interval: 60000 })
+const searchedNodes = computed(() => groupNodeList.value.filter(n => isNodeMatchSearch(n, debouncedSearchText.value)))
+const healthFilters = computed(() => NODE_HEALTH_FILTERS.map(filter => ({
+  ...filter,
+  count: searchedNodes.value.filter(node => matchesNodeHealth(node, filter.key, now.value.getTime())).length,
+})))
+
 const nodeList = computed(() => {
-  let filtered = groupNodeList.value
-  if (debouncedSearchText.value.trim()) {
-    filtered = filtered.filter(n => isNodeMatchSearch(n, debouncedSearchText.value))
-  }
+  const filtered = searchedNodes.value.filter(node => matchesNodeHealth(node, healthFilter.value, now.value.getTime()))
   if (appStore.nodeViewMode === 'card')
     return applyOfflineLast(applyPinnedFirst(sortNodes(filtered, cardSortKey.value, cardSortDir.value), appStore.pinnedNodes))
   return filtered
@@ -263,6 +270,17 @@ function getNodeItemTransitionStyle(index: number): Record<string, string> {
                 </div>
               </div>
             </div>
+          </div>
+          <div class="flex flex-wrap gap-1.5 pointer-events-auto" role="group" aria-label="节点状态筛选">
+            <button
+              v-for="filter in healthFilters" :key="filter.key" type="button"
+              :aria-pressed="healthFilter === filter.key" :title="filter.hint"
+              class="px-2.5 py-1 rounded-md text-xs bg-background/40 ring-1 ring-foreground/[0.06] hover:bg-background/70 focus-visible:outline-2 focus-visible:outline-emerald-500"
+              :class="healthFilter === filter.key ? 'text-emerald-600 bg-background/80' : 'text-muted-foreground'"
+              @click="healthFilter = filter.key"
+            >
+              {{ filter.label }} <span class="opacity-60">{{ filter.count }}</span>
+            </button>
           </div>
           <!-- 卡片视图排序 chips -->
           <div v-if="appStore.nodeViewMode === 'card'" class="sort-chips flex gap-1 overflow-x-auto -mt-1 pointer-events-auto">

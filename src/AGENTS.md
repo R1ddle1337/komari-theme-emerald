@@ -66,7 +66,7 @@ When you need a new piece of UI:
 
 ## Icons
 
-- All icons go through `@iconify/vue` (`<Icon icon="icon-park-outline:sun" />`). Sets are fetched on demand from the Iconify CDN — `@/utils/iconify`'s `setupIconify()` is a no-op kept as a future extension point. Do not preregister whole icon sets in client bundles.
+- All icons go through `@iconify/vue` (`<Icon icon="icon-park-outline:sun" />`). The Vite plugin `scripts/iconifySubset.ts` extracts literal icon names and bundles only those icons. `@/utils/iconify` registers the subset before mount; custom dynamic names can still use the Iconify CDN fallback. Do not preregister whole icon sets in client bundles.
 - Lucide icons are available via the `lucide:` prefix (e.g. `lucide:x`, `lucide:minus`). Do **not** add `lucide-vue-next` or any other icon-as-component package — the project deliberately routes everything through Iconify so there is a single icon pipeline.
 
 ## Styles

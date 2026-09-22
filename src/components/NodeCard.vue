@@ -10,6 +10,7 @@ import { ProgressThin } from '@/components/ui/progress-thin'
 import { useNodePingDisplay } from '@/composables/useNodePingDisplay'
 import { useAppStore } from '@/stores/app'
 import { formatBytesPerSecondWithConfig, formatBytesWithConfig, formatDateTime, formatRelativeTime, formatUptimeWithFormat, getStatus } from '@/utils/helper'
+import { nodeTrafficUsed } from '@/utils/nodeHealth'
 import { getOSImage, getOSName } from '@/utils/osImageHelper'
 import { getRegionCode, getRegionDisplayName } from '@/utils/regionHelper'
 import { buildPriceTags, parseTags } from '@/utils/tagHelper'
@@ -44,39 +45,17 @@ function showTrafficProgress(node: NodeData): boolean {
   return node.traffic_limit > 0
 }
 
-const trafficUsedPercentage = computed(() => {
-  if (props.node.traffic_limit <= 0)
-    return 0
-  const { net_total_up = 0, net_total_down = 0, traffic_limit_type } = props.node
-  let used = 0
-  switch (traffic_limit_type) {
-    case 'up': used = net_total_up
-      break
-    case 'down': used = net_total_down
-      break
-    case 'min': used = Math.min(net_total_up, net_total_down)
-      break
-    case 'max': used = Math.max(net_total_up, net_total_down)
-      break
-    case 'sum':
-    default:
-      used = net_total_up + net_total_down
-      break
-  }
-  return Math.min((used / props.node.traffic_limit) * 100, 100)
-})
+const trafficUsed = computed(() => nodeTrafficUsed(props.node))
+const trafficUsedPercentage = computed(() => props.node.traffic_limit > 0
+  ? Math.min(trafficUsed.value / props.node.traffic_limit * 100, 100)
+  : 0)
 
-const trafficUsed = computed(() => {
-  const { net_total_up = 0, net_total_down = 0, traffic_limit_type } = props.node
-  switch (traffic_limit_type) {
-    case 'up': return net_total_up
-    case 'down': return net_total_down
-    case 'min': return Math.min(net_total_up, net_total_down)
-    case 'max': return Math.max(net_total_up, net_total_down)
-    case 'sum':
-    default: return net_total_up + net_total_down
+function openWithKeyboard(event: KeyboardEvent) {
+  if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) {
+    event.preventDefault()
+    emit('click')
   }
-})
+}
 
 const priceTags = computed(() => buildPriceTags(props.node, appStore.lang))
 
@@ -100,10 +79,12 @@ function hasRegion(region: string | null | undefined): boolean {
 <template>
   <CardX
     hoverable
-    class="node-card w-full cursor-pointer backdrop-blur-xl backdrop-saturate-150 bg-background/40 border-none shadow-[0_0_0_3px] shadow-transparent hover:bg-background/60 hover:shadow-slate-500/10 transition-all duration-200 rounded-lg ring-1 ring-foreground/[0.06] glass-hover-blur"
+    role="link" tabindex="0" :aria-label="`查看 ${props.node.name} 详情`"
+    class="node-card focus-visible:outline-2 focus-visible:outline-emerald-500 w-full cursor-pointer backdrop-blur-xl backdrop-saturate-150 bg-background/40 border-none shadow-[0_0_0_3px] shadow-transparent hover:bg-background/60 hover:shadow-slate-500/10 transition-all duration-200 rounded-lg ring-1 ring-foreground/[0.06] glass-hover-blur"
     :class="[!props.node.online && '!shadow-red-600/20']"
     :header-class="`max-md:px-3 max-md:py-2.5 ${isCompact ? 'md:px-3 md:py-2' : ''}`"
     :content-class="`max-md:p-3 max-md:pt-0 ${isCompact ? 'md:p-3 md:pt-0' : ''}`"
+    @keydown="openWithKeyboard"
     @click="emit('click')"
   >
     <template #header>

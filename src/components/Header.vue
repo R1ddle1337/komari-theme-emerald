@@ -41,7 +41,7 @@ function toggleMenu() {
 }
 
 const shaderOptions: { label: string, value: ShaderType, icon: string }[] = [
-  { label: '气泡', value: 'bubbles', icon: 'icon-park-outline:bubble' },
+  { label: '气泡', value: 'bubbles', icon: 'tabler:bubble' },
   { label: '流体', value: 'liquid', icon: 'icon-park-outline:water-level' },
   { label: '无', value: 'none', icon: 'icon-park-outline:close-one' },
 ]
@@ -139,7 +139,7 @@ const sitename = computed(() => appStore.publicSettings?.sitename || 'Komari Mon
     :class="isScrolled ? '!border-slate-500/10 backdrop-blur-xl backdrop-saturate-150' : 'bg-transparent'"
   >
     <div class="px-4 flex-between h-14 max-w-[1280px] mx-auto">
-      <div class="flex items-center gap-3 cursor-pointer" @click="router.push('/')">
+      <div role="link" tabindex="0" aria-label="返回首页" class="flex items-center gap-3 cursor-pointer rounded focus-visible:outline-2 focus-visible:outline-emerald-500" @click="router.push('/')" @keydown.enter="router.push('/')">
         <Avatar class="size-8">
           <AvatarImage :src="siteFavicon" :alt="sitename" />
           <AvatarFallback>{{ sitename.slice(0, 1) }}</AvatarFallback>
@@ -154,7 +154,7 @@ const sitename = computed(() => appStore.publicSettings?.sitename || 'Komari Mon
           <div ref="triggerRef" class="relative shader-menu-container">
             <Tooltip>
               <TooltipTrigger as-child>
-                <Button variant="ghost" size="icon-sm" @click.stop="toggleMenu">
+                <Button variant="ghost" size="icon-sm" aria-label="背景效果" :aria-expanded="showShaderMenu" @keydown.esc="showShaderMenu = false" @click.stop="toggleMenu">
                   <Icon icon="icon-park-outline:pic" :width="18" :height="18" />
                 </Button>
               </TooltipTrigger>

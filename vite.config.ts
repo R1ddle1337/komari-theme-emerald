@@ -9,6 +9,7 @@ import vue from '@vitejs/plugin-vue'
 import { defineConfig } from 'vite'
 
 import vueDevTools from 'vite-plugin-vue-devtools'
+import { iconifySubset } from './scripts/iconifySubset'
 
 const require = createRequire(import.meta.url)
 const fs = require('node:fs')
@@ -88,6 +89,7 @@ export default defineConfig({
     __BUILD_GIT_HASH__: JSON.stringify(getCommitHash()),
   },
   plugins: [
+    iconifySubset(),
     vue(),
     vueDevTools(),
     tailwindcss(),
