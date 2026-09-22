@@ -125,7 +125,7 @@ function handleButtonClick(action: string) {
       toggleOfflineNotify()
       break
     case 'jumpToSetting':
-      location.href = '/admin'
+      location.href = appStore.isLoggedIn ? '/admin/dashboard' : '/admin/login'
       break
   }
 }

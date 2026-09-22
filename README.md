@@ -71,3 +71,10 @@ bun run preview
 ## License
 
 [MIT](./LICENSE)
+
+## Komari 1.5 compatibility (v1.30.0)
+
+- Startup reads public settings and account state concurrently; private sites open the current login route directly.
+- History uses `public:queryMetrics` with per-series downsampling and sample-weighted loss. Older backends fall back only when the method is unavailable. Partial loss no longer erases successful latency buckets.
+- History requests use HTTP independently of the live WebSocket. Disconnects reject pending requests, read-only calls can fall back to HTTP, and leaving the page cancels reconnect timers.
+- The administration button links directly to the dashboard or login page. Existing theme settings and layout are retained.

@@ -43,6 +43,7 @@ class InitManager {
   private lastClientsFetchedAt = 0
   private onVisibilityChange: (() => void) | null = null
   private useWebSocket: boolean | null = null // 根据主题配置决定
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null
   constructor(config: InitConfig = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config }
     this.rpc = getSharedRpc()
@@ -74,14 +75,13 @@ class InitManager {
     }
 
     try {
-      // 1. 测试后端服务是否正常
-      await this.healthCheck()
-
-      // 2. 获取服务端公开属性
-      await this.fetchPublicSettings()
-
-      // 3. 获取用户信息
-      await this.fetchUserInfo()
+      // Independent startup reads do not need three sequential round trips.
+      await Promise.all([this.fetchPublicSettings(), this.fetchUserInfo()])
+      if (this.appStore.publicSettings?.private_site && !this.appStore.isLoggedIn) {
+        location.replace('/admin/login?redirect=%2F')
+        this.appStore.loading = false
+        return
+      }
 
       // 4. 获取节点信息和最新状态
       await this.fetchNodesData()
@@ -99,30 +99,6 @@ class InitManager {
       // 即使失败也解除加载状态，显示错误页面
       this.appStore.loading = false
       throw error
-    }
-  }
-
-  /**
-   * 健康检查 - 测试后端服务是否正常
-   */
-  private async healthCheck(): Promise<void> {
-    try {
-      const result = await this.rpc.ping()
-      if (result !== 'pong') {
-        throw new RpcError(-32000, 'Unexpected health check response')
-      }
-    }
-    catch (error) {
-      if (error instanceof RpcError && error.code === 401) {
-        console.warn('[InitManager] Private site detected, redirecting to /admin')
-        this.appStore.updateLoginState(false)
-        this.appStore.loading = false
-        location.href = '/admin'
-        return
-      }
-      console.error('[InitManager] Health check failed:', error)
-      this.appStore.connectionError = true
-      throw new Error('Backend service unavailable')
     }
   }
 
@@ -245,23 +221,25 @@ class InitManager {
       return
     }
 
-    ws.onclose = () => {
+    ws.addEventListener('close', () => {
       // 如果当前是已连接状态且还在使用 WebSocket 模式，触发重连
       if (this.useWebSocket === true && this.nodesStore.wsConnectionState === 'connected') {
         this.nodesStore.updateWsState('disconnected')
         this.scheduleReconnect()
       }
-    }
+    }, { once: true })
 
-    ws.onerror = () => {
+    ws.addEventListener('error', () => {
       console.error('[InitManager] WebSocket error')
-    }
+    })
   }
 
   /**
    * 安排重连
    */
   private scheduleReconnect(): void {
+    if (this.useWebSocket === false)
+      return
     const attempts = this.nodesStore.wsReconnectAttempts
 
     // 达到最大重连次数，回落到 POST 模式
@@ -278,7 +256,9 @@ class InitManager {
 
     this.nodesStore.updateWsState('reconnecting', attempts + 1)
 
-    setTimeout(async () => {
+    if (this.reconnectTimer)
+      clearTimeout(this.reconnectTimer)
+    this.reconnectTimer = setTimeout(async () => {
       try {
         const client = this.rpc.getClient()
         client.close()
@@ -406,6 +386,9 @@ class InitManager {
    * 销毁管理器
    */
   destroy(): void {
+    this.useWebSocket = false
+    if (this.reconnectTimer)
+      clearTimeout(this.reconnectTimer)
     this.stopPolling()
     this.rpc.close()
     this.nodesStore.clearNodes()

@@ -242,8 +242,6 @@ export class KomariApi {
         signal: controller.signal,
       })
 
-      clearTimeout(timeoutId)
-
       const result: ApiResponse<T> = await response.json()
 
       if (result.status === 'error') {
@@ -253,10 +251,12 @@ export class KomariApi {
       return result.data
     }
     catch (error) {
-      clearTimeout(timeoutId)
       if (error instanceof ApiError)
         throw error
       throw new ApiError(`Network error: ${error instanceof Error ? error.message : String(error)}`, 'error')
+    }
+    finally {
+      clearTimeout(timeoutId)
     }
   }
 
@@ -276,8 +276,6 @@ export class KomariApi {
         signal: controller.signal,
       })
 
-      clearTimeout(timeoutId)
-
       if (!response.ok) {
         throw new ApiError(`HTTP error: ${response.status}`, 'error', response.status)
       }
@@ -285,10 +283,12 @@ export class KomariApi {
       return await response.json()
     }
     catch (error) {
-      clearTimeout(timeoutId)
       if (error instanceof ApiError)
         throw error
       throw new ApiError(`Network error: ${error instanceof Error ? error.message : String(error)}`, 'error')
+    }
+    finally {
+      clearTimeout(timeoutId)
     }
   }
 
@@ -312,8 +312,6 @@ export class KomariApi {
         signal: controller.signal,
       })
 
-      clearTimeout(timeoutId)
-
       const result = await response.json()
 
       // 登录接口返回 set-cookie 特殊结构
@@ -330,10 +328,12 @@ export class KomariApi {
       return apiResult.data
     }
     catch (error) {
-      clearTimeout(timeoutId)
       if (error instanceof ApiError)
         throw error
       throw new ApiError(`Network error: ${error instanceof Error ? error.message : String(error)}`, 'error')
+    }
+    finally {
+      clearTimeout(timeoutId)
     }
   }
 

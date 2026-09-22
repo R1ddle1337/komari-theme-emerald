@@ -1,7 +1,8 @@
 import type { MaybeRefOrGetter } from 'vue'
+import type { PingHistoryRecord } from '@/utils/metrics'
 import { useThrottleFn } from '@vueuse/core'
 import { computed, onScopeDispose, ref, shallowRef, toValue, watch } from 'vue'
-import { getSharedRpc } from '@/utils/rpc'
+import { getPingHistoryRecords, pingAverageLatency, pingLostCount, pingSampleCount } from '@/utils/metrics'
 
 export interface NodePingHistoryPoint {
   time: string
@@ -17,16 +18,7 @@ export interface NodePingStatsState {
   hasData: boolean
 }
 
-interface PingRecord {
-  client: string
-  task_id: number
-  time: string
-  value: number
-}
-
-interface SharedPingRecordsResponse {
-  records?: PingRecord[]
-}
+type PingRecord = PingHistoryRecord
 
 interface SharedPingRecordsState {
   recordsByClient: Map<string, PingRecord[]>
@@ -43,7 +35,7 @@ interface SharedPingRecordsEntry {
 }
 
 const HISTORY_BUCKET_COUNT = 20
-const CACHE_VERSION = 6
+const CACHE_VERSION = 7
 const CACHE_KEY_PREFIX = 'komari-theme-emerald:node-ping-stats'
 const FULL_LOSS_EPSILON = 1e-6
 const PING_RECORD_REFRESH_INTERVAL_MS = 60_000
@@ -79,10 +71,8 @@ function summarizeTaskRecords(records: PingRecord[]): Map<number, TaskRecordSumm
 
   for (const record of records) {
     const summary = summaries.get(record.task_id) ?? { total: 0, success: 0 }
-    summary.total += 1
-    if (record.value >= 0) {
-      summary.success += 1
-    }
+    summary.total += pingSampleCount(record)
+    summary.success += pingSampleCount(record) - pingLostCount(record)
     summaries.set(record.task_id, summary)
   }
 
@@ -214,20 +204,15 @@ async function loadSharedPingRecords(entry: SharedPingRecordsEntry, hours: numbe
   if (entry.promise)
     return entry.promise
 
-  const rpc = getSharedRpc()
   entry.loading.value = true
   entry.error.value = null
 
   entry.promise = (async () => {
     try {
-      const result = await rpc.getClient().call<SharedPingRecordsResponse>('common:getRecords', {
-        type: 'ping',
-        // 新版 getRecords 可能只返回近期可用样本，hours 仅作为服务端查询窗口。
-        hours,
-      })
+      const records = await getPingHistoryRecords(hours)
 
       entry.data.value = {
-        recordsByClient: buildRecordsByClient(result?.records ?? []),
+        recordsByClient: buildRecordsByClient(records),
       }
       entry.lastFetchedAt = Date.now()
     }
@@ -332,12 +317,13 @@ function buildPingHistory(records: PingRecord[]): NodePingHistoryPoint[] {
       record => record.timestamp >= startTime && record.timestamp < endTime,
     )
     const validLatencyRecords = bucketRecords.filter(record => record.value >= 0)
-    const lostCount = bucketRecords.length - validLatencyRecords.length
+    const lostCount = bucketRecords.reduce((total, record) => total + pingLostCount(record), 0)
+    const sampleCount = bucketRecords.reduce((total, record) => total + pingSampleCount(record), 0)
     const latency = validLatencyRecords.length
-      ? average(validLatencyRecords.map(record => record.value))
+      ? pingAverageLatency(validLatencyRecords)
       : null
     const loss = bucketRecords.length
-      ? lostCount / bucketRecords.length * 100
+      ? lostCount / sampleCount * 100
       : null
 
     return {
@@ -395,8 +381,10 @@ function buildStats(records: PingRecord[]): NodePingStatsState {
     if (!validValues.length)
       continue
 
-    latencyValues.push(average(validValues))
-    taskLossValues.push((recordsByTask.length - validValues.length) / recordsByTask.length * 100)
+    latencyValues.push(pingAverageLatency(recordsByTask))
+    const samples = recordsByTask.reduce((total, record) => total + pingSampleCount(record), 0)
+    const lost = recordsByTask.reduce((total, record) => total + pingLostCount(record), 0)
+    taskLossValues.push(lost / samples * 100)
 
     if (validValues.length > 1) {
       const p50 = getPercentile(validValues, 0.5)

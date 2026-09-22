@@ -268,7 +268,9 @@ async function fetchRecords() {
         if (point.value === null)
           continue
 
-        if (series.metric_key === 'ping.loss' && point.value <= 0)
+        // A rollup can contain partial loss (0..1). It must not overwrite the
+        // successful latency sample from the same bucket with a full outage.
+        if (series.metric_key === 'ping.loss' && point.value < 1)
           continue
 
         records.push({

@@ -3,6 +3,8 @@
  * @see https://www.komari.wiki/dev/rpc.html
  */
 
+const SAFE_READ_METHOD = /^(?:rpc\.(?:ping|get)|(?:common|public):get)/
+
 // ==================== 类型定义 ====================
 
 /** JSON-RPC 2.0 请求结构 */
@@ -33,11 +35,6 @@ interface JsonRpcErrorResponse {
 
 /** JSON-RPC 2.0 响应 */
 type JsonRpcResponse<T = unknown> = JsonRpcSuccessResponse<T> | JsonRpcErrorResponse
-
-const HTTP_PROTOCOL_PREFIX = 'http://'
-const HTTPS_PROTOCOL_PREFIX = 'https://'
-const WS_PROTOCOL_PREFIX = 'ws://'
-const WSS_PROTOCOL_PREFIX = 'wss://'
 
 /** RPC 方法元数据 */
 export interface MethodMeta {
@@ -260,8 +257,6 @@ export class RpcClient {
         signal: controller.signal,
       })
 
-      clearTimeout(timeoutId)
-
       if (!response.ok) {
         throw new RpcError(response.status, `HTTP error: ${response.status}`)
       }
@@ -270,10 +265,12 @@ export class RpcClient {
       return this.handleResponse(data)
     }
     catch (error) {
-      clearTimeout(timeoutId)
       if (error instanceof RpcError)
         throw error
       throw new RpcError(-32000, `Network error: ${error instanceof Error ? error.message : String(error)}`)
+    }
+    finally {
+      clearTimeout(timeoutId)
     }
   }
 
@@ -307,9 +304,8 @@ export class RpcClient {
    */
   private initWebSocket(): Promise<void> {
     return new Promise((resolve, reject) => {
-      const wsUrl = this.baseUrl.startsWith(HTTPS_PROTOCOL_PREFIX)
-        ? this.baseUrl.replace(HTTPS_PROTOCOL_PREFIX, WSS_PROTOCOL_PREFIX)
-        : this.baseUrl.replace(HTTP_PROTOCOL_PREFIX, WS_PROTOCOL_PREFIX)
+      const target = new URL(this.baseUrl, window.location.href)
+      target.protocol = target.protocol === 'https:' ? 'wss:' : 'ws:'
 
       // 关闭现有连接（如果有）
       if (this.ws) {
@@ -322,13 +318,20 @@ export class RpcClient {
         }
       }
 
-      this.ws = new WebSocket(wsUrl)
+      const socket = new WebSocket(target.href)
+      this.ws = socket
+      const connectTimer = setTimeout(() => {
+        socket.close()
+        reject(new RpcError(-32001, 'WebSocket connection timeout'))
+      }, 10000)
 
       this.ws.onopen = () => {
+        clearTimeout(connectTimer)
         resolve()
       }
 
       this.ws.onerror = () => {
+        clearTimeout(connectTimer)
         reject(new RpcError(-32000, 'WebSocket connection error'))
       }
 
@@ -355,6 +358,10 @@ export class RpcClient {
       }
 
       this.ws.onclose = () => {
+        clearTimeout(connectTimer)
+        reject(new RpcError(-32000, 'WebSocket closed before opening'))
+        if (this.ws !== socket)
+          return
         this.ws = null
         // Reject all pending requests
         this.pendingRequests.forEach((pending, id) => {
@@ -369,7 +376,7 @@ export class RpcClient {
   /**
    * 调用 RPC 方法（WebSocket）
    */
-  private async callWebSocket<T>(method: string, params?: Record<string, unknown> | unknown[]): Promise<T> {
+  private async callWebSocket<T>(method: string, params?: Record<string, unknown> | unknown[], timeout = this.timeout): Promise<T> {
     await this.ensureWebSocketReady()
 
     return new Promise((resolve, reject) => {
@@ -384,7 +391,7 @@ export class RpcClient {
       const timer = setTimeout(() => {
         this.pendingRequests.delete(id)
         reject(new RpcError(-32001, 'Request timeout'))
-      }, this.timeout)
+      }, timeout)
 
       this.pendingRequests.set(id, {
         resolve: resolve as (value: unknown) => void,
@@ -419,8 +426,21 @@ export class RpcClient {
    * 调用 RPC 方法
    */
   async call<T>(method: string, params?: Record<string, unknown> | unknown[]): Promise<T> {
+    // History queries must not block live status on the server's serial WS.
+    if (method === 'public:queryMetrics' || method === 'public:getPingMetricStats' || method === 'common:getRecords') {
+      return this.callHttp<T>(method, params)
+    }
     if (this.useWebSocket) {
-      return this.callWebSocket<T>(method, params)
+      try {
+        return await this.callWebSocket<T>(method, params, Math.min(this.timeout, 5000))
+      }
+      catch (error) {
+        if (!(error instanceof RpcError) || ![-32000, -32001].includes(error.code))
+          throw error
+        if (!SAFE_READ_METHOD.test(method))
+          throw error
+        return this.callHttp<T>(method, params)
+      }
     }
     return this.callHttp<T>(method, params)
   }
@@ -432,8 +452,7 @@ export class RpcClient {
     if (this.useWebSocket !== useWebSocket) {
       this.useWebSocket = useWebSocket
       if (!useWebSocket && this.ws) {
-        this.ws.close()
-        this.ws = null
+        this.close()
       }
     }
   }
@@ -449,19 +468,20 @@ export class RpcClient {
    * 确保 WebSocket 连接已建立并通过 ping 验证
    */
   async ensureWebSocketConnectedWithPing(timeoutMs = 10000): Promise<void> {
-    await this.ensureWebSocketReady()
-
-    // 使用 AbortController 实现超时
-    const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
-
+    let timeoutId: ReturnType<typeof setTimeout> | undefined
     try {
-      await this.callWebSocket<string>('rpc.ping')
-      clearTimeout(timeoutId)
+      await Promise.race([
+        this.callWebSocket<string>('rpc.ping', undefined, timeoutMs),
+        new Promise<never>((_, reject) => {
+          timeoutId = setTimeout(() => {
+            this.close()
+            reject(new RpcError(-32001, 'WebSocket connection timeout'))
+          }, timeoutMs)
+        }),
+      ])
     }
-    catch (error) {
+    finally {
       clearTimeout(timeoutId)
-      throw error
     }
   }
 
@@ -473,6 +493,11 @@ export class RpcClient {
       this.ws.close()
       this.ws = null
     }
+    this.pendingRequests.forEach((pending) => {
+      clearTimeout(pending.timer)
+      pending.reject(new RpcError(-32000, 'WebSocket closed'))
+    })
+    this.pendingRequests.clear()
   }
 
   /**
@@ -602,7 +627,7 @@ export class KomariRpc {
       uuid,
       hours,
       load_type: loadType,
-      max_count: maxCount,
+      maxCount,
     })
   }
 
@@ -614,7 +639,7 @@ export class KomariRpc {
       type: 'ping',
       task_id: taskId,
       hours,
-      max_count: maxCount,
+      maxCount,
     })
   }
 
