@@ -3,6 +3,8 @@
  * @see https://www.komari.wiki/dev/rpc.html
  */
 
+import { decodeMetricResponse } from '@/utils/metricWire'
+
 const SAFE_READ_METHOD = /^(?:rpc\.(?:ping|get)|(?:common|public):get)/
 
 // ==================== 类型定义 ====================
@@ -238,6 +240,8 @@ export class RpcClient {
    * 调用 RPC 方法（HTTP POST）
    */
   private async callHttp<T>(method: string, params?: Record<string, unknown> | unknown[], signal?: AbortSignal): Promise<T> {
+    if (method === 'public:queryMetrics' && params && !Array.isArray(params))
+      params = { compact: true, ...params }
     const id = ++this.requestId
     const request: JsonRpcRequest = {
       jsonrpc: '2.0',
@@ -268,7 +272,8 @@ export class RpcClient {
       }
 
       const data: JsonRpcResponse<T> = await response.json()
-      return this.handleResponse(data)
+      const result = this.handleResponse(data)
+      return method === 'public:queryMetrics' ? decodeMetricResponse(result) : result
     }
     catch (error) {
       if (error instanceof RpcError)
