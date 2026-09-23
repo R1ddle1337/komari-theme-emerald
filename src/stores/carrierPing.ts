@@ -1,9 +1,9 @@
-import type { PingSummary, PingTask } from '@/utils/carrierPing'
+import type { PingHistorySeries, PingSummary, PingTask, TaskTrends } from '@/utils/carrierPing'
 import { useStorage } from '@vueuse/core'
 import { defineStore } from 'pinia'
 import { computed, ref, shallowRef } from 'vue'
 import { useAppStore } from '@/stores/app'
-import { classifyCarrierTasks } from '@/utils/carrierPing'
+import { classifyCarrierTasks, indexPingHistory, TREND_MINUTES } from '@/utils/carrierPing'
 import { getSharedRpc } from '@/utils/rpc'
 
 const REFRESH_MS = 60_000
@@ -13,6 +13,9 @@ export const useCarrierPingStore = defineStore('carrierPing', () => {
   const enabled = computed(() => app.publicSettings?.record_enabled !== false && app.publicSettings?.ping_record_preserve_time !== 0)
   const tasks = shallowRef<PingTask[]>([])
   const summaries = shallowRef<PingSummary[]>([])
+  const history = shallowRef<Map<string, TaskTrends>>(new Map())
+  const historyError = ref(false)
+  const historyEnd = ref(0)
   const loading = ref(false)
   const error = ref(false)
   const updatedAt = ref(0)
@@ -45,16 +48,33 @@ export const useCarrierPingStore = defineStore('carrierPing', () => {
     loading.value = true
     try {
       const client = getSharedRpc().getClient()
-      const [nextTasks, result] = await Promise.all([
+      const end = Date.now()
+      const start = Math.floor(end / 60_000) * 60_000 - (TREND_MINUTES - 1) * 60_000
+      const [nextTasks, result, trend] = await Promise.allSettled([
         client.call<PingTask[]>('public:getPublicPingTasks', undefined, { signal: request.signal }),
         client.call<{ stats: PingSummary[] }>('public:getPingMetricStats', { hours: 5 / 60 }, { signal: request.signal }),
+        client.call<{ series: PingHistorySeries[] }>('public:queryMetrics', {
+          metric_keys: ['ping.latency_ms', 'ping.loss'],
+          start: new Date(start).toISOString(),
+          end: new Date(end).toISOString(),
+          max_points: TREND_MINUTES,
+          aggregation: 'avg',
+        }, { signal: request.signal }),
       ])
       if (!active || request.signal.aborted)
         return
-      tasks.value = nextTasks
-      summaries.value = result.stats
-      updatedAt.value = Date.now()
-      error.value = false
+      if (nextTasks.status === 'fulfilled')
+        tasks.value = nextTasks.value
+      if (result.status === 'fulfilled') {
+        summaries.value = result.value.stats
+        updatedAt.value = end
+      }
+      error.value = nextTasks.status === 'rejected' || result.status === 'rejected'
+      historyError.value = trend.status === 'rejected'
+      if (trend.status === 'fulfilled') {
+        history.value = indexPingHistory(trend.value.series)
+        historyEnd.value = end
+      }
     }
     catch {
       if (active && !request.signal.aborted)
@@ -101,5 +121,5 @@ export const useCarrierPingStore = defineStore('carrierPing', () => {
     document.removeEventListener('visibilitychange', visibilityChanged)
   }
 
-  return { enabled, carrierTasks, regions, selectedRegion, byNode, loading, error, updatedAt, start, stop }
+  return { enabled, carrierTasks, regions, selectedRegion, byNode, history, historyError, historyEnd, loading, error, updatedAt, start, stop }
 })

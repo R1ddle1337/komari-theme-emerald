@@ -3,16 +3,22 @@ import type { CarrierReading } from '@/utils/carrierPing'
 import { Icon } from '@iconify/vue'
 import { PopoverClose, PopoverContent, PopoverPortal, PopoverRoot, PopoverTrigger } from 'reka-ui'
 import { computed } from 'vue'
+import CarrierSparkline from '@/components/CarrierSparkline.vue'
 import { useCarrierPingStore } from '@/stores/carrierPing'
-import { carrierReading, CARRIERS } from '@/utils/carrierPing'
+import { carrierReading, CARRIERS, carrierTrend } from '@/utils/carrierPing'
 
 const props = defineProps<{ uuid: string, online: boolean, compact?: boolean }>()
 const ping = useCarrierPingStore()
 const rows = computed(() => ping.regions.map(region => ({
   region,
-  carriers: CARRIERS.map(carrier => ({ ...carrier, ...carrierReading(ping.carrierTasks, ping.byNode.get(props.uuid) ?? [], region, carrier.id) })),
+  carriers: CARRIERS.map(carrier => ({ ...carrier, ...carrierReading(ping.carrierTasks, ping.byNode.get(props.uuid) ?? [], region, carrier.id), trend: carrierTrend(ping.carrierTasks, ping.history.get(props.uuid), region, carrier.id, ping.historyEnd) })),
 })))
-const selected = computed(() => rows.value.find(row => row.region === ping.selectedRegion)?.carriers ?? CARRIERS.map(carrier => ({ ...carrier, latency: null, loss: null, samples: 0, targets: 0 })))
+const selected = computed(() => rows.value.find(row => row.region === ping.selectedRegion)?.carriers ?? CARRIERS.map(carrier => ({ ...carrier, latency: null, loss: null, samples: 0, targets: 0, trend: [] })))
+
+const graphReady = computed(() => props.online && ping.enabled && !ping.historyError && !ping.error && ping.historyEnd > 0)
+const ceiling = computed(() => Math.max(50, Math.ceil(Math.max(0, ...selected.value.flatMap(c => c.trend.map(p => p.latency ?? 0))) / 50) * 50))
+const allCeiling = computed(() => Math.max(50, Math.ceil(Math.max(0, ...rows.value.flatMap(r => r.carriers.flatMap(c => c.trend.map(p => p.latency ?? 0)))) / 50) * 50))
+const carrierColors = { telecom: 'text-teal-600 dark:text-teal-400', unicom: 'text-indigo-500 dark:text-indigo-400', mobile: 'text-sky-600 dark:text-sky-400' }
 
 function label(reading: CarrierReading) {
   if (!props.online)
@@ -53,20 +59,28 @@ function tone(reading: CarrierReading) {
       <button
         type="button" data-carrier-latency :data-node="uuid"
         :aria-label="`查看${ping.selectedRegion || ''}三网延迟和各地对比`"
-        class="w-full min-w-0 rounded-lg border border-border bg-muted/50 text-left hover:bg-accent focus-visible:outline-2 focus-visible:outline-emerald-500"
+        class="w-full min-w-0 rounded-xl border border-primary/10 bg-gradient-to-br from-muted/50 to-card/80 text-left hover:border-primary/25 focus-visible:outline-2 focus-visible:outline-emerald-500"
         :class="compact ? 'px-1 py-1' : 'p-2.5'"
         @click.stop @keydown.stop
       >
         <span v-if="!compact" class="mb-1.5 flex items-center justify-between gap-1 text-[11px] text-muted-foreground">
           <span>{{ ping.selectedRegion || '测点' }}三网</span>
-          <span class="inline-flex items-center gap-0.5">近 5 分钟 <Icon icon="tabler:chevron-down" width="12" /></span>
+          <span class="inline-flex items-center gap-0.5">各地对比 <Icon icon="tabler:chevron-down" width="12" /></span>
         </span>
-        <span class="grid grid-cols-3 gap-1">
+        <span class="grid grid-cols-3 gap-2">
           <span v-for="carrier in selected" :key="carrier.id" class="flex min-w-0 flex-col gap-0.5" :data-carrier="carrier.id">
-            <span class="text-[11px] text-muted-foreground">{{ carrier.name }}</span>
+            <span class="flex items-center gap-1 text-[11px]" :class="carrierColors[carrier.id]"><span class="size-1 rounded-full bg-current" />{{ carrier.name }}</span>
             <span class="whitespace-nowrap font-medium tabular-nums" :class="[compact ? 'text-[10px]' : 'text-sm', tone(carrier)]">{{ label(carrier) }}</span>
-            <span v-if="!compact" class="text-[11px] text-muted-foreground tabular-nums">{{ lossLabel(carrier) }}</span>
+            <span v-if="graphReady" class="relative block" :class="carrierColors[carrier.id]">
+              <CarrierSparkline :points="carrier.trend" :ceiling="ceiling" :name="carrier.name" :class="compact ? '!h-4' : ''" />
+              <span v-if="carrier.trend.every(p => p.latency === null && p.loss === null)" class="absolute inset-0 flex items-center justify-center text-[9px] text-muted-foreground">暂无趋势</span>
+            </span>
+            <span v-if="!compact" class="text-[10px] text-muted-foreground tabular-nums">{{ lossLabel(carrier) }}</span>
           </span>
+        </span>
+        <span v-if="!compact" class="mt-2 flex justify-between gap-1 text-[9px] text-muted-foreground">
+          <template v-if="graphReady"><span>30 分钟趋势 · 0–{{ ceiling }} ms</span><span>数值为近 5 分钟均值</span></template>
+          <span v-else-if="online && ping.enabled">{{ ping.historyError ? '趋势更新失败，稍后重试' : ping.loading ? '正在加载趋势…' : '' }}</span>
         </span>
       </button>
     </PopoverTrigger>
@@ -105,7 +119,8 @@ function tone(reading: CarrierReading) {
                 <div :class="tone(reading)">
                   {{ label(reading) }}
                 </div>
-                <div class="mt-0.5 text-[11px] text-muted-foreground">
+                <CarrierSparkline v-if="graphReady" :points="reading.trend" :ceiling="allCeiling" :name="`${row.region}${reading.name}`" class="!h-8" :class="carrierColors[reading.id]" />
+                <div class="mt-0.5 text-[10px] text-muted-foreground">
                   {{ lossLabel(reading) }}
                 </div>
               </td>
@@ -118,7 +133,7 @@ function tone(reading: CarrierReading) {
           </tbody>
         </table>
         <p class="mt-2 text-[10px] leading-relaxed text-muted-foreground">
-          节点到各地测点的近 5 分钟平均延迟，每分钟刷新。可在首页切换统一比较的测点地区。
+          数值为近 5 分钟成功探测均值；曲线展示近 30 分钟趋势，每分钟刷新。三网共用刻度，红条表示丢包，空白表示缺测，不用 0 延迟代替。
         </p>
       </PopoverContent>
     </PopoverPortal>

@@ -3,7 +3,7 @@ import type { NodeData } from '@/stores/nodes'
 import type { CurrencyCode } from '@/utils/financeHelper'
 import { Icon } from '@iconify/vue'
 import { PopoverClose, PopoverContent, PopoverPortal, PopoverRoot, PopoverTrigger } from 'reka-ui'
-import { computed, defineAsyncComponent, onMounted, ref } from 'vue'
+import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useAppStore } from '@/stores/app'
 import { useNodesStore } from '@/stores/nodes'
 import * as financeHelper from '@/utils/financeHelper'
@@ -14,7 +14,14 @@ const props = defineProps<{
   globeNodes?: NodeData[]
 }>()
 const NodeEarthGlobe = defineAsyncComponent(() => import('@/components/NodeEarthGlobe.vue'))
-const earthOpen = ref(false)
+const globeReady = ref(false)
+let globeTimer: ReturnType<typeof setTimeout> | undefined
+onMounted(() => {
+  globeTimer = setTimeout(() => {
+    globeReady.value = true
+  }, 350)
+})
+onBeforeUnmount(() => clearTimeout(globeTimer))
 
 const appStore = useAppStore()
 const nodesStore = useNodesStore()
@@ -181,71 +188,69 @@ const summaryMetrics = computed(() => {
 
 <template>
   <section class="px-4 pb-6" aria-label="资源概览">
-    <div class="grid grid-cols-2 min-[360px]:grid-cols-3 gap-2 sm:gap-3 xl:grid-cols-6">
-      <template v-for="metric in summaryMetrics" :key="metric.key">
-        <PopoverRoot v-if="metric.key === 'finance'">
-          <PopoverTrigger as-child>
-            <button type="button" aria-label="查看费用和汇率" class="rounded-xl border border-border bg-card p-3 sm:p-4 text-left transition-colors hover:border-primary/40 focus-visible:outline-2 focus-visible:outline-primary">
-              <span class="mb-1.5 sm:mb-3 flex items-center justify-between text-xs text-muted-foreground">{{ metric.label }}<Icon :icon="metric.icon" width="16" /></span>
-              <span class="block truncate text-lg sm:text-xl font-semibold tracking-tight">{{ metric.value }}</span>
-              <span class="mt-1 hidden sm:block text-[11px] text-muted-foreground">{{ metric.detail }} · 查看明细</span>
-            </button>
-          </PopoverTrigger>
-          <PopoverPortal>
-            <PopoverContent side="bottom" :side-offset="8" :collision-padding="12" class="z-50 w-[min(23rem,calc(100vw-1.5rem))] rounded-xl border border-border bg-popover p-4 shadow-lg" aria-label="费用和汇率">
-              <div class="mb-4 flex items-center justify-between text-sm font-semibold">
-                费用概览<PopoverClose aria-label="关闭费用概览" class="rounded p-1 hover:bg-muted">
-                  <Icon icon="tabler:x" width="16" />
-                </PopoverClose>
-              </div>
-              <div class="grid grid-cols-3 gap-3">
-                <div v-for="item in financeSummaryItems" :key="item.label">
-                  <div class="text-xs text-muted-foreground">
-                    {{ item.label }}
-                  </div>
-                  <div class="mt-1 text-sm font-semibold">
-                    {{ item.symbol }}{{ item.value }}
-                  </div>
-                  <div class="text-[10px] text-muted-foreground">
-                    {{ item.currency }}
+    <div class="grid gap-4" :class="!appStore.hideEarth ? 'lg:grid-cols-[1.65fr_1fr]' : ''">
+      <div class="grid grid-cols-2 min-[360px]:grid-cols-3 gap-3" :class="appStore.hideEarth ? 'xl:grid-cols-6' : ''">
+        <template v-for="metric in summaryMetrics" :key="metric.key">
+          <PopoverRoot v-if="metric.key === 'finance'">
+            <PopoverTrigger as-child>
+              <button type="button" aria-label="查看费用和汇率" class="summary-tile flex flex-col justify-start rounded-2xl border border-white/70 dark:border-white/10 bg-card/90 p-3 sm:p-4 text-left transition-colors hover:border-primary/40 focus-visible:outline-2 focus-visible:outline-primary">
+                <span class="mb-2 sm:mb-4 flex items-center justify-between text-xs text-muted-foreground">{{ metric.label }}<span class="rounded-lg bg-primary/10 p-1.5 text-primary"><Icon :icon="metric.icon" width="16" /></span></span>
+                <span class="block truncate text-base sm:text-2xl font-semibold tracking-tight">{{ metric.value }}</span>
+                <span class="mt-1 hidden sm:block text-[11px] text-muted-foreground">{{ metric.detail }} · 查看明细</span>
+              </button>
+            </PopoverTrigger>
+            <PopoverPortal>
+              <PopoverContent side="bottom" :side-offset="8" :collision-padding="12" class="z-50 w-[min(23rem,calc(100vw-1.5rem))] rounded-xl border border-border bg-popover p-4 shadow-lg" aria-label="费用和汇率">
+                <div class="mb-4 flex items-center justify-between text-sm font-semibold">
+                  费用概览<PopoverClose aria-label="关闭费用概览" class="rounded p-1 hover:bg-muted">
+                    <Icon icon="tabler:x" width="16" />
+                  </PopoverClose>
+                </div>
+                <div class="grid grid-cols-3 gap-3">
+                  <div v-for="item in financeSummaryItems" :key="item.label">
+                    <div class="text-xs text-muted-foreground">
+                      {{ item.label }}
+                    </div>
+                    <div class="mt-1 text-sm font-semibold">
+                      {{ item.symbol }}{{ item.value }}
+                    </div>
+                    <div class="text-[10px] text-muted-foreground">
+                      {{ item.currency }}
+                    </div>
                   </div>
                 </div>
-              </div>
-              <div class="mb-2 mt-4 flex items-center justify-between border-t border-border pt-3 text-xs">
-                <span class="text-muted-foreground">今日汇率</span>
-                <select :value="exchangeRateBaseCurrency" class="rounded border bg-card px-2 py-1" aria-label="切换汇率基准币种" @change="setExchangeRateBaseCurrency">
-                  <option v-for="currency in financeRateCurrencies" :key="currency" :value="currency">
-                    {{ currency }}
-                  </option>
-                </select>
-              </div>
-              <div class="grid grid-cols-2 gap-x-6 gap-y-2 text-xs">
-                <div v-for="row in exchangeRateRows" :key="row.currency" class="flex justify-between">
-                  <span class="text-muted-foreground">{{ row.currency }}</span><span>{{ row.targetSymbol }}{{ row.rate }}</span>
+                <div class="mb-2 mt-4 flex items-center justify-between border-t border-border pt-3 text-xs">
+                  <span class="text-muted-foreground">今日汇率</span>
+                  <select :value="exchangeRateBaseCurrency" class="rounded border bg-card px-2 py-1" aria-label="切换汇率基准币种" @change="setExchangeRateBaseCurrency">
+                    <option v-for="currency in financeRateCurrencies" :key="currency" :value="currency">
+                      {{ currency }}
+                    </option>
+                  </select>
                 </div>
-              </div>
-            </PopoverContent>
-          </PopoverPortal>
-        </PopoverRoot>
-        <div v-else class="min-w-0 rounded-xl border border-border bg-card p-3 sm:p-4" :title="metric.hint">
-          <div class="mb-1.5 sm:mb-3 flex items-center justify-between gap-2 text-xs text-muted-foreground">
-            {{ metric.label }}<Icon :icon="metric.icon" width="16" />
+                <div class="grid grid-cols-2 gap-x-6 gap-y-2 text-xs">
+                  <div v-for="row in exchangeRateRows" :key="row.currency" class="flex justify-between">
+                    <span class="text-muted-foreground">{{ row.currency }}</span><span>{{ row.targetSymbol }}{{ row.rate }}</span>
+                  </div>
+                </div>
+              </PopoverContent>
+            </PopoverPortal>
+          </PopoverRoot>
+          <div v-else class="min-w-0 summary-tile rounded-2xl border border-white/70 dark:border-white/10 bg-card/90 p-3 sm:p-4" :title="metric.hint" :data-metric="metric.key">
+            <div class="mb-2 sm:mb-4 flex items-center justify-between gap-2 text-xs text-muted-foreground">
+              {{ metric.label }}<span class="rounded-lg bg-primary/10 p-1.5 text-primary"><Icon :icon="metric.icon" width="16" /></span>
+            </div>
+            <div class="truncate text-base sm:text-2xl font-semibold tracking-tight">
+              {{ metric.value }}
+            </div>
+            <div class="mt-1 hidden sm:block truncate text-[11px] text-muted-foreground">
+              {{ metric.detail }}
+            </div>
           </div>
-          <div class="truncate text-lg sm:text-xl font-semibold tracking-tight">
-            {{ metric.value }}
-          </div>
-          <div class="mt-1 hidden sm:block truncate text-[11px] text-muted-foreground">
-            {{ metric.detail }}
-          </div>
-        </div>
-      </template>
-    </div>
-    <div v-if="!appStore.hideEarth" class="mt-3">
-      <button type="button" :aria-expanded="earthOpen" aria-controls="node-distribution" class="flex items-center gap-1.5 rounded text-xs text-muted-foreground hover:text-primary focus-visible:outline-2" @click="earthOpen = !earthOpen">
-        <Icon icon="tabler:world" width="14" />节点分布<Icon :icon="earthOpen ? 'tabler:chevron-up' : 'tabler:chevron-down'" width="12" />
-      </button>
-      <div v-if="earthOpen" id="node-distribution" class="mt-3 overflow-hidden rounded-xl border border-border bg-card">
-        <NodeEarthGlobe :nodes="globeNodes" />
+        </template>
+      </div>
+      <div v-if="!appStore.hideEarth" class="min-h-64 lg:min-h-0" data-globe-panel>
+        <NodeEarthGlobe v-if="globeReady" :nodes="globeNodes ?? summaryNodes" />
+        <div v-else class="h-full min-h-64 rounded-2xl border border-primary/10 bg-card/70" />
       </div>
     </div>
   </section>

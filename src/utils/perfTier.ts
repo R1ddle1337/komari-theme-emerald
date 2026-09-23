@@ -1,6 +1,6 @@
 import { ref } from 'vue'
 
-/** 按设备性能和减少动态效果偏好控制地球分辨率及自动旋转。仅展开地球后探测。 */
+/** 按设备性能和减少动态效果偏好控制地球分辨率及自动旋转。用于地球和 Shader 背景。 */
 export type PerfTier = 'high' | 'medium' | 'low'
 
 const STORAGE_KEY = 'emerald-perf-tier-v1'
@@ -86,4 +86,20 @@ export async function initPerfTier(): Promise<void> {
   else if (fps < 48)
     result = base === 'high' ? 'medium' : 'low'
   applyTier(result, true)
+}
+
+/**
+ * 滚动冻结：滚动中及结束后 idleMs 内挂起背景重绘，
+ * 避免"滚动失效 + 动画失效"双重叠加。调用方在渲染循环里查询。
+ */
+export function createScrollFreeze(idleMs = 300): { isFrozen: () => boolean, dispose: () => void } {
+  let frozenUntil = 0
+  const onScroll = () => {
+    frozenUntil = performance.now() + idleMs
+  }
+  document.addEventListener('scroll', onScroll, { capture: true, passive: true })
+  return {
+    isFrozen: () => performance.now() < frozenUntil,
+    dispose: () => document.removeEventListener('scroll', onScroll, { capture: true }),
+  }
 }

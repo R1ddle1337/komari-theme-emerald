@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { useDocumentVisibility, usePreferredReducedMotion } from '@vueuse/core'
-import { computed, onUnmounted, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, onUnmounted, ref, watch } from 'vue'
 import { useAppStore } from '@/stores/app'
 
+const ShaderBackground = defineAsyncComponent(() => import('@/components/ShaderBackground.vue'))
+const ShaderBackgroundLiquid = defineAsyncComponent(() => import('@/components/ShaderBackgroundLiquid.vue'))
 const appStore = useAppStore()
 
 const isLoaded = ref(false)
@@ -130,6 +132,10 @@ onUnmounted(() => {
 
 <template>
   <div class="background-container" :style="backgroundContainerStyle">
+    <div v-if="!hasCustomBackground && appStore.shaderType !== 'none'" class="absolute inset-0" :style="{ opacity: appStore.shaderIntensity }" data-shader-background :data-shader="appStore.shaderType">
+      <ShaderBackgroundLiquid v-if="appStore.shaderType === 'liquid'" />
+      <ShaderBackground v-else />
+    </div>
     <Transition name="fade">
       <div v-if="showLoadingBackground" class="background-loading" />
     </Transition>
@@ -167,7 +173,8 @@ onUnmounted(() => {
 .background-container {
   position: fixed;
   inset: 0;
-  z-index: -1;
+  z-index: 0;
+  pointer-events: none;
   overflow: hidden;
 }
 

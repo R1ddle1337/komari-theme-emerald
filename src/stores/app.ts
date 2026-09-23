@@ -1,9 +1,10 @@
 import type { PublicSettings } from '@/utils/api'
 import type { ByteDecimalsConfig } from '@/utils/helper'
-import { usePreferredDark, useStorageAsync } from '@vueuse/core'
+import { usePreferredDark, useStorage, useStorageAsync } from '@vueuse/core'
 import { defineStore } from 'pinia'
 import { computed, ref, watch } from 'vue'
 
+export type ShaderType = 'bubbles' | 'liquid' | 'none'
 export type ThemeMode = 'auto' | 'light' | 'dark'
 type Lang = 'zh-CN' | 'en-US'
 type NodeViewMode = 'card' | 'list'
@@ -27,6 +28,16 @@ const useAppStore = defineStore('app', () => {
 
   // 使用 VueUse 的 useStorageAsync 实现自动持久化
   const themeMode = useStorageAsync<ThemeMode>('themeMode', 'auto', localStorage)
+  const shaderType = useStorage<ShaderType>('shaderType', 'bubbles')
+  const shaderIntensity = useStorage<number>('emerald:shader-intensity', 0.65)
+  watch(shaderType, (value) => {
+    if (!['bubbles', 'liquid', 'none'].includes(value))
+      shaderType.value = 'bubbles'
+  }, { immediate: true })
+  watch(shaderIntensity, (value) => {
+    if (!Number.isFinite(value) || value < 0.2 || value > 1)
+      shaderIntensity.value = 0.65
+  }, { immediate: true })
   const lang = ref<Lang>('zh-CN')
   const publicSettings = ref<PublicSettings>()
   const nodeSelectedGroup = useStorageAsync<string>('nodeSelectedGroup', 'all', localStorage)
@@ -386,6 +397,8 @@ const useAppStore = defineStore('app', () => {
   return {
     loading,
     themeMode,
+    shaderType,
+    shaderIntensity,
     isDark,
     resolvedThemeMode,
     lang,

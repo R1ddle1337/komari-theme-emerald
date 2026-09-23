@@ -73,7 +73,7 @@ const network = computed(() => [
 <template>
   <CardX
     role="link" tabindex="0" :aria-label="`查看 ${props.node.name} 详情`"
-    class="node-card h-full w-full cursor-pointer rounded-xl border border-border bg-card transition-colors hover:border-primary/40 focus-visible:outline-2 focus-visible:outline-primary"
+    class="node-card h-full w-full cursor-pointer rounded-2xl border border-white/70 dark:border-white/10 bg-card/95 transition-[border-color,box-shadow,transform] duration-200 hover:border-primary/30 hover:-translate-y-0.5 motion-reduce:transform-none focus-visible:outline-2 focus-visible:outline-primary"
     :header-class="isCompact ? '!px-3 !pt-3 !pb-2' : '!px-4 !pt-4 !pb-3'"
     :content-class="isCompact ? '!p-3 !pt-0' : '!p-4 !pt-0'"
     @keydown="openWithKeyboard" @click="emit('click')"
@@ -121,6 +121,7 @@ const network = computed(() => [
         <span class="text-xs text-muted-foreground">最后上报 {{ offlineTime }}</span>
         <span class="text-xs text-muted-foreground">点击查看配置与历史数据</span>
       </div>
+      <CarrierLatency :uuid="props.node.uuid" :online="props.node.online" />
       <div v-if="props.node.online" class="grid grid-cols-2 gap-3 border-t border-border pt-3">
         <div v-for="direction in network" :key="direction.label" class="min-w-0">
           <div class="mb-1 flex items-center gap-1 text-[11px] text-muted-foreground">
@@ -134,7 +135,6 @@ const network = computed(() => [
           </div>
         </div>
       </div>
-      <CarrierLatency :uuid="props.node.uuid" :online="props.node.online" />
       <div v-if="props.node.online && (appStore.showNodeConnections || appStore.showNodeUptime)" class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
         <span v-if="appStore.showNodeUptime" class="flex items-center gap-1" title="系统运行时间">
           <Icon icon="tabler:clock-hour-4" width="12" />{{ formatUptime(props.node.uptime ?? 0) }}

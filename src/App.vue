@@ -4,6 +4,7 @@ import { Toaster } from '@/components/ui/sonner'
 import { useAppStore } from '@/stores/app'
 import { useNodesStore } from '@/stores/nodes'
 import { destroyInitManager, initApp } from '@/utils/init'
+import { initPerfTier } from '@/utils/perfTier'
 import Background from './components/Background.vue'
 import ConnectionBanner from './components/ConnectionBanner.vue'
 import Footer from './components/Footer.vue'
@@ -17,6 +18,7 @@ const nodesStore = useNodesStore()
 // 节点掉线/恢复浏览器通知：首个非空快照只记录基线不通知
 const lastOnlineState = new Map<string, boolean>()
 let onlineStateSeeded = false
+let perfTimer: ReturnType<typeof setTimeout> | undefined
 
 watch(
   () => nodesStore.nodes.map(node => `${node.uuid}:${node.online ? 1 : 0}`).join(','),
@@ -67,6 +69,10 @@ watchEffect(() => {
 onMounted(async () => {
   try {
     await initApp()
+    // Measure after startup imports and initial painting settle.
+    perfTimer = setTimeout(() => {
+      void initPerfTier()
+    }, 2500)
   }
   catch (error) {
     console.error('[App] Initialization failed:', error)
@@ -74,6 +80,7 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
+  clearTimeout(perfTimer)
   destroyInitManager()
 })
 </script>
