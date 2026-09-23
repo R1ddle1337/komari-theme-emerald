@@ -237,7 +237,7 @@ export class RpcClient {
   /**
    * 调用 RPC 方法（HTTP POST）
    */
-  private async callHttp<T>(method: string, params?: Record<string, unknown> | unknown[]): Promise<T> {
+  private async callHttp<T>(method: string, params?: Record<string, unknown> | unknown[], signal?: AbortSignal): Promise<T> {
     const id = ++this.requestId
     const request: JsonRpcRequest = {
       jsonrpc: '2.0',
@@ -247,7 +247,13 @@ export class RpcClient {
     }
 
     const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), this.timeout)
+    const abort = () => controller.abort()
+    if (signal?.aborted)
+      abort()
+    else
+      signal?.addEventListener('abort', abort, { once: true })
+    const budget = method === 'common:getNodesLatestStatus' || method === 'common:getNodes' || method === 'rpc.ping' ? Math.min(this.timeout, 8000) : this.timeout
+    const timeoutId = setTimeout(() => controller.abort(), budget)
 
     try {
       const response = await fetch(this.baseUrl, {
@@ -271,6 +277,7 @@ export class RpcClient {
     }
     finally {
       clearTimeout(timeoutId)
+      signal?.removeEventListener('abort', abort)
     }
   }
 
@@ -425,10 +432,10 @@ export class RpcClient {
   /**
    * 调用 RPC 方法
    */
-  async call<T>(method: string, params?: Record<string, unknown> | unknown[]): Promise<T> {
+  async call<T>(method: string, params?: Record<string, unknown> | unknown[], options: { signal?: AbortSignal } = {}): Promise<T> {
     // History queries must not block live status on the server's serial WS.
-    if (method === 'public:queryMetrics' || method === 'public:getPingMetricStats' || method === 'common:getRecords') {
-      return this.callHttp<T>(method, params)
+    if (options.signal || method === 'public:queryMetrics' || method === 'public:getPingMetricStats' || method === 'common:getRecords') {
+      return this.callHttp<T>(method, params, options.signal)
     }
     if (this.useWebSocket) {
       try {
@@ -439,10 +446,10 @@ export class RpcClient {
           throw error
         if (!SAFE_READ_METHOD.test(method))
           throw error
-        return this.callHttp<T>(method, params)
+        return this.callHttp<T>(method, params, options.signal)
       }
     }
-    return this.callHttp<T>(method, params)
+    return this.callHttp<T>(method, params, options.signal)
   }
 
   /**
@@ -584,8 +591,8 @@ export class KomariRpc {
   /**
    * 获取节点最近状态记录
    */
-  async getNodeRecentStatus(uuid: string, limit?: number): Promise<{ count: number, records: StatusRecord[] }> {
-    return this.client.call<{ count: number, records: StatusRecord[] }>('common:getNodeRecentStatus', { uuid, limit })
+  async getNodeRecentStatus(uuid: string, limit?: number, options: { signal?: AbortSignal } = {}): Promise<{ count: number, records: StatusRecord[] }> {
+    return this.client.call<{ count: number, records: StatusRecord[] }>('common:getNodeRecentStatus', { uuid, limit }, options)
   }
 
   /**

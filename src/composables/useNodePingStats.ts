@@ -1,7 +1,7 @@
 import type { MaybeRefOrGetter } from 'vue'
 import type { PingHistoryRecord } from '@/utils/metrics'
 import { useThrottleFn } from '@vueuse/core'
-import { computed, onScopeDispose, ref, shallowRef, toValue, watch } from 'vue'
+import { computed, onActivated, onDeactivated, onScopeDispose, ref, shallowRef, toValue, watch } from 'vue'
 import { getPingHistoryRecords, pingAverageLatency, pingLostCount, pingSampleCount } from '@/utils/metrics'
 
 export interface NodePingHistoryPoint {
@@ -30,8 +30,10 @@ interface SharedPingRecordsEntry {
   error: ReturnType<typeof ref<string | null>>
   promise: Promise<void> | null
   refreshTimer: ReturnType<typeof setInterval> | null
+  controller: AbortController | null
   subscribers: number
   lastFetchedAt: number
+  onVisibilityChange: (() => void) | null
 }
 
 const HISTORY_BUCKET_COUNT = 20
@@ -164,8 +166,10 @@ function createSharedPingRecordsEntry(): SharedPingRecordsEntry {
     error: ref<string | null>(null),
     promise: null,
     refreshTimer: null,
+    controller: null,
     subscribers: 0,
     lastFetchedAt: 0,
+    onVisibilityChange: null,
   }
 }
 
@@ -207,9 +211,11 @@ async function loadSharedPingRecords(entry: SharedPingRecordsEntry, hours: numbe
   entry.loading.value = true
   entry.error.value = null
 
+  entry.controller = new AbortController()
+  const signal = entry.controller.signal
   entry.promise = (async () => {
     try {
-      const records = await getPingHistoryRecords(hours)
+      const records = await getPingHistoryRecords(hours, signal)
 
       entry.data.value = {
         recordsByClient: buildRecordsByClient(records),
@@ -217,6 +223,8 @@ async function loadSharedPingRecords(entry: SharedPingRecordsEntry, hours: numbe
       entry.lastFetchedAt = Date.now()
     }
     catch (err) {
+      if (signal.aborted)
+        return
       entry.error.value = err instanceof Error ? err.message : '获取 Ping 历史失败'
       throw err
     }
@@ -233,17 +241,30 @@ function startSharedPingRecordsRefresh(entry: SharedPingRecordsEntry, hours: num
   if (entry.refreshTimer)
     return
 
-  entry.refreshTimer = setInterval(() => {
-    void loadSharedPingRecords(entry, hours).catch(() => {})
-  }, PING_RECORD_REFRESH_INTERVAL_MS)
+  const refresh = () => {
+    if (!document.hidden && entry.subscribers > 0 && Date.now() - entry.lastFetchedAt >= PING_RECORD_REFRESH_INTERVAL_MS)
+      void loadSharedPingRecords(entry, hours).catch(() => {})
+  }
+  entry.refreshTimer = setInterval(refresh, PING_RECORD_REFRESH_INTERVAL_MS)
+  entry.onVisibilityChange = () => {
+    if (document.hidden)
+      entry.controller?.abort()
+    else
+      refresh()
+  }
+  document.addEventListener('visibilitychange', entry.onVisibilityChange)
 }
 
 function stopSharedPingRecordsRefresh(entry: SharedPingRecordsEntry): void {
   if (!entry.refreshTimer)
     return
 
+  entry.controller?.abort()
   clearInterval(entry.refreshTimer)
   entry.refreshTimer = null
+  if (entry.onVisibilityChange)
+    document.removeEventListener('visibilitychange', entry.onVisibilityChange)
+  entry.onVisibilityChange = null
 }
 
 function retainSharedPingRecordsEntry(hours: number): () => void {
@@ -426,10 +447,18 @@ export function useNodePingStats(
   const loading = ref(false)
   const error = ref<string | null>(null)
 
+  const active = ref(true)
+  onActivated(() => {
+    active.value = true
+  })
+  onDeactivated(() => {
+    active.value = false
+  })
+
   const resolved = computed(() => ({
     uuid: toValue(uuid),
     hours: Math.max(1, Math.floor(toValue(options?.hours) ?? 24)),
-    enabled: toValue(options?.enabled) ?? true,
+    enabled: active.value && (toValue(options?.enabled) ?? true),
   }))
 
   let activeHours: number | null = null

@@ -71,12 +71,13 @@ Do not change zip naming, manifest filename, or preview filename without updatin
 
 ## CI facts
 
-Source of truth: `.github/workflows/build-ci.yml`
+Source of truth: `.github/workflows/release-on-version-bump.yml`
 
-CI does only:
+CI uses pinned Bun/Node versions and committed `bun.lock`:
 
 1. `bun install --frozen-lockfile`
-2. `bun run build`
+2. `bun run lint`
+3. `bun run build`
 
 CI does not run tests, because there is no test suite.
 

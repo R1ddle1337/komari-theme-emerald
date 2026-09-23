@@ -41,6 +41,9 @@ class InitManager {
   private isPolling = false
   private isInitialized = false
   private lastClientsFetchedAt = 0
+  private refreshingClients = false
+  private consecutiveFailures = 0
+  private destroyed = false
   private onVisibilityChange: (() => void) | null = null
   private useWebSocket: boolean | null = null // 根据主题配置决定
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null
@@ -83,8 +86,14 @@ class InitManager {
         return
       }
 
+      if (this.destroyed)
+        return
+
       // 4. 获取节点信息和最新状态
       await this.fetchNodesData()
+
+      if (this.destroyed)
+        return
 
       // 5. 解除加载状态
       this.appStore.loading = false
@@ -96,9 +105,13 @@ class InitManager {
     }
     catch (error) {
       console.error('[InitManager] Initialization failed:', error)
-      // 即使失败也解除加载状态，显示错误页面
+      if (this.destroyed)
+        return
       this.appStore.loading = false
-      throw error
+      this.appStore.connectionError = true
+      // An initial network failure must not leave the site empty forever.
+      this.startWebSocketAndPolling()
+      this.isInitialized = true
     }
   }
 
@@ -144,6 +157,8 @@ class InitManager {
         this.rpc.getNodesLatestStatus() as Promise<Record<string, NodeStatus>>,
       ])
 
+      if (this.destroyed)
+        return
       // 初始化节点数据
       this.nodesStore.initNodes(clientsResult, statusesResult)
       this.lastClientsFetchedAt = Date.now()
@@ -182,7 +197,7 @@ class InitManager {
    */
   private async connectWebSocket(): Promise<void> {
     // 如果已回落到 POST 模式或配置为 HTTP 模式，不再尝试 WebSocket
-    if (this.useWebSocket === false) {
+    if (this.destroyed || this.useWebSocket === false) {
       return
     }
 
@@ -195,10 +210,9 @@ class InitManager {
     try {
       // 使用 ping 验证连接，10 秒超时
       await client.ensureWebSocketConnectedWithPing(10000)
+      if (this.destroyed)
+        return
       this.nodesStore.updateWsState('connected', 0)
-
-      // 连接成功，重置错误状态
-      this.appStore.connectionError = false
 
       // 监听连接状态变化
       this.monitorWebSocketConnection()
@@ -238,7 +252,7 @@ class InitManager {
    * 安排重连
    */
   private scheduleReconnect(): void {
-    if (this.useWebSocket === false)
+    if (this.destroyed || this.useWebSocket === false)
       return
     const attempts = this.nodesStore.wsReconnectAttempts
 
@@ -313,7 +327,7 @@ class InitManager {
    * 执行轮询任务
    */
   private async poll(): Promise<void> {
-    if (this.isPolling) {
+    if (this.destroyed || this.isPolling) {
       return
     }
 
@@ -325,29 +339,27 @@ class InitManager {
     this.isPolling = true
 
     try {
-      // 状态每轮都拉；节点基本信息变化很慢，按 CLIENTS_REFRESH_INTERVAL_MS 低频刷新
+      // Metadata refresh is independent: a slow config read cannot hold up
+      // live status. The status response itself proves connectivity.
       const now = Date.now()
-      const shouldRefreshClients = now - this.lastClientsFetchedAt >= CLIENTS_REFRESH_INTERVAL_MS
-
-      const [, statusesResult, clientsResult] = await Promise.all([
-        // 1. Ping 测试服务器状态
-        this.rpc.ping(),
-        // 2. 获取节点最新状态
-        this.rpc.getNodesLatestStatus() as Promise<Record<string, NodeStatus>>,
-        // 3. 低频获取节点信息
-        shouldRefreshClients
-          ? this.rpc.getNodes() as Promise<Record<string, Client>>
-          : Promise.resolve(null),
-      ])
-
-      // 更新节点信息（就地合并，不会重建数组）
-      if (clientsResult) {
-        this.nodesStore.updateNodeClients(clientsResult)
-        this.lastClientsFetchedAt = now
+      if (!this.refreshingClients && now - this.lastClientsFetchedAt >= CLIENTS_REFRESH_INTERVAL_MS) {
+        this.refreshingClients = true
+        void this.rpc.getNodes().then((clients) => {
+          if (this.destroyed)
+            return
+          this.nodesStore.updateNodeClients(clients as Record<string, Client>)
+          this.lastClientsFetchedAt = Date.now()
+        }).catch((error) => {
+          console.warn('[InitManager] Metadata refresh failed:', error)
+        }).finally(() => { this.refreshingClients = false })
       }
+      const statusesResult = await this.rpc.getNodesLatestStatus() as Record<string, NodeStatus>
+      if (this.destroyed)
+        return
 
       // 更新节点状态
       this.nodesStore.updateNodeStatuses(statusesResult)
+      this.consecutiveFailures = 0
 
       // 连接恢复正常，重置错误状态
       this.appStore.connectionError = false
@@ -360,12 +372,19 @@ class InitManager {
         console.error('[InitManager] Poll error:', error)
       }
 
-      // 一次失败就显示错误
-      this.appStore.connectionError = true
+      if (!this.destroyed) {
+        this.consecutiveFailures++
+        this.appStore.connectionError = this.nodesStore.lastStatusReceivedAt === null
+          || this.consecutiveFailures >= this.config.postFailureThreshold
+      }
     }
     finally {
       this.isPolling = false
     }
+  }
+
+  async refresh(): Promise<void> {
+    await this.poll()
   }
 
   /**
@@ -386,6 +405,7 @@ class InitManager {
    * 销毁管理器
    */
   destroy(): void {
+    this.destroyed = true
     this.useWebSocket = false
     if (this.reconnectTimer)
       clearTimeout(this.reconnectTimer)

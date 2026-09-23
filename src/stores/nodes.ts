@@ -126,6 +126,7 @@ type ClientSyncField = (typeof CLIENT_SYNC_FIELDS)[number]
 const useNodesStore = defineStore('nodes', () => {
   // ===== 状态 =====
   const nodes = ref<NodeData[]>([])
+  const lastStatusReceivedAt = ref<number | null>(null)
   const wsConnectionState = ref<WsConnectionState>('disconnected')
   const wsReconnectAttempts = ref<number>(0)
 
@@ -305,6 +306,7 @@ const useNodesStore = defineStore('nodes', () => {
    * 初始化节点数据（首次加载）
    */
   function initNodes(clients: Record<string, Client>, statuses: Record<string, NodeStatus>): void {
+    lastStatusReceivedAt.value = Date.now()
     const uuids = Object.keys(clients)
 
     // 更新现有节点或添加新节点
@@ -359,6 +361,7 @@ const useNodesStore = defineStore('nodes', () => {
    * 更新节点状态（实时更新）
    */
   function updateNodeStatuses(statuses: Record<string, NodeStatus>): void {
+    lastStatusReceivedAt.value = Date.now()
     let onlineChanged = false
     Object.entries(statuses).forEach(([uuid, status]) => {
       const node = nodeIndex.get(uuid)
@@ -427,12 +430,14 @@ const useNodesStore = defineStore('nodes', () => {
    */
   function clearNodes(): void {
     nodes.value = []
+    lastStatusReceivedAt.value = null
     nodeIndex.clear()
   }
 
   return {
     // 状态
     nodes,
+    lastStatusReceivedAt,
     wsConnectionState,
     wsReconnectAttempts,
     // 计算属性

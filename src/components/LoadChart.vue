@@ -2,9 +2,9 @@
 import type { RecordFormat } from '@/utils/recordHelper'
 import type { StatusRecord } from '@/utils/rpc'
 import { Icon } from '@iconify/vue'
-import { useIntervalFn } from '@vueuse/core'
+import { useDocumentVisibility, useIntervalFn } from '@vueuse/core'
 import dayjs from 'dayjs'
-import { computed, onMounted, ref, shallowRef, watch } from 'vue'
+import { computed, onMounted, onScopeDispose, ref, shallowRef, watch } from 'vue'
 import VChart from 'vue-echarts'
 import { CardX } from '@/components/ui/card-x'
 import { Empty } from '@/components/ui/empty'
@@ -13,8 +13,9 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useAppStore } from '@/stores/app'
 import { useNodesStore } from '@/stores/nodes'
 import { formatBytes, formatBytesSplit } from '@/utils/helper'
+import { escapeChartText, metricSourceLabel } from '@/utils/metricPresentation'
 import { fillMissingTimePoints } from '@/utils/recordHelper'
-import { getSharedRpc } from '@/utils/rpc'
+import { getSharedRpc, RpcError } from '@/utils/rpc'
 import '@/utils/echarts' // 共享 ECharts 配置
 
 const props = defineProps<{
@@ -153,7 +154,10 @@ const metricData = shallowRef<RecordFormat[] | null>(null)
 const loading = ref(false)
 const isInitialLoad = ref(true) // 是否为首次加载（用于控制实时模式下的 NSpin 显示）
 const error = ref<string | null>(null)
+const sourceLabel = ref('')
 let fetchRequestId = 0
+let activeRequest: AbortController | null = null
+const visibility = useDocumentVisibility()
 
 // 节点信息
 const nodeInfo = computed(() => nodesStore.nodesByUuid.get(props.uuid))
@@ -170,6 +174,8 @@ interface MetricPoint {
 }
 
 interface MetricSeries {
+  downsampled?: boolean
+  interval_seconds?: number
   metric_key: string
   tags?: Record<string, string>
   tag?: Record<string, string>
@@ -250,7 +256,7 @@ function metricSeriesToRecords(seriesList: MetricSeries[]): RecordFormat[] {
 }
 
 /** 优先从 metric store 获取历史数据（服务端降采样），不可用时返回 null 走旧接口 */
-async function fetchHistoryFromMetrics(hours: number): Promise<RecordFormat[] | null> {
+async function fetchHistoryFromMetrics(hours: number, signal: AbortSignal): Promise<RecordFormat[] | null> {
   const result = await rpc.getClient().call<MetricQueryResponse>('public:queryMetrics', {
     metric_keys: Object.keys(LOAD_METRIC_FIELDS),
     entity_id: props.uuid,
@@ -258,10 +264,12 @@ async function fetchHistoryFromMetrics(hours: number): Promise<RecordFormat[] | 
     downsample: true,
     max_points: 500,
     aggregation: 'avg',
-  })
+  }, { signal })
 
+  if (!signal.aborted)
+    sourceLabel.value = metricSourceLabel(result?.series ?? [])
   const records = metricSeriesToRecords(result?.series ?? [])
-  return records.length ? records : null
+  return records
 }
 
 function statusToRecordFormat(records: StatusRecord[]): RecordFormat[] {
@@ -290,7 +298,7 @@ function statusToRecordFormat(records: StatusRecord[]): RecordFormat[] {
   }))
 }
 
-async function fetchRecentData() {
+async function fetchRecentData(signal: AbortSignal) {
   if (!props.uuid)
     return
 
@@ -303,8 +311,8 @@ async function fetchRecentData() {
   error.value = null
 
   try {
-    const result = await rpc.getNodeRecentStatus(props.uuid)
-    if (requestId !== fetchRequestId)
+    const result = await rpc.getNodeRecentStatus(props.uuid, 150, { signal })
+    if (requestId !== fetchRequestId || signal.aborted)
       return
     const records = result?.records || []
     records.sort((a, b) => dayjs(a.time).valueOf() - dayjs(b.time).valueOf())
@@ -313,20 +321,20 @@ async function fetchRecentData() {
     remoteData.value = records.slice(-maxLength)
   }
   catch (err) {
-    if (requestId !== fetchRequestId)
+    if (requestId !== fetchRequestId || signal.aborted)
       return
     error.value = err instanceof Error ? err.message : '获取数据失败'
     remoteData.value = []
   }
   finally {
-    if (requestId === fetchRequestId) {
+    if (requestId === fetchRequestId && !signal.aborted) {
       loading.value = false
       isInitialLoad.value = false
     }
   }
 }
 
-async function fetchHistoryData() {
+async function fetchHistoryData(signal: AbortSignal) {
   if (!props.uuid)
     return
 
@@ -338,8 +346,8 @@ async function fetchHistoryData() {
 
   // 优先走 metric store（Komari 1.2.5+，服务端降采样，传输量小一个量级）
   try {
-    const records = await fetchHistoryFromMetrics(hours)
-    if (requestId !== fetchRequestId)
+    const records = await fetchHistoryFromMetrics(hours, signal)
+    if (requestId !== fetchRequestId || signal.aborted)
       return
     if (records) {
       metricData.value = records
@@ -348,23 +356,30 @@ async function fetchHistoryData() {
       return
     }
   }
-  catch {
-    // 旧版后端没有 public:queryMetrics，回落到旧接口
+  catch (cause) {
+    if (requestId !== fetchRequestId || signal.aborted)
+      return
+    if (!(cause instanceof RpcError) || cause.code !== -32601) {
+      error.value = cause instanceof Error ? cause.message : '获取数据失败'
+      loading.value = false
+      return
+    }
+    // Only an unsupported method warrants using the legacy endpoint.
   }
 
-  if (requestId !== fetchRequestId)
+  if (requestId !== fetchRequestId || signal.aborted)
     return
 
   try {
     const apiBase = import.meta.env.VITE_API_BASE
-    const response = await fetch(`${apiBase}/records/load?uuid=${props.uuid}&hours=${hours}`)
+    const response = await fetch(`${apiBase}/records/load?uuid=${encodeURIComponent(props.uuid)}&hours=${hours}`, { signal })
 
     if (!response.ok) {
       throw new Error(`HTTP error: ${response.status}`)
     }
 
     const resp = await response.json()
-    if (requestId !== fetchRequestId)
+    if (requestId !== fetchRequestId || signal.aborted)
       return
     const records = resp.data?.records || []
 
@@ -377,26 +392,42 @@ async function fetchHistoryData() {
     remoteData.value = records
   }
   catch (err) {
-    if (requestId !== fetchRequestId)
+    if (requestId !== fetchRequestId || signal.aborted)
       return
     error.value = err instanceof Error ? err.message : '获取数据失败'
     remoteData.value = []
   }
   finally {
-    if (requestId === fetchRequestId) {
+    if (requestId === fetchRequestId && !signal.aborted) {
       loading.value = false
     }
   }
 }
 
-async function fetchData() {
-  if (isRealtime.value) {
-    await fetchRecentData()
+async function fetchData(replace = false) {
+  if (visibility.value !== 'visible')
+    return
+  if (activeRequest && !replace)
+    return
+  activeRequest?.abort()
+  const controller = new AbortController()
+  activeRequest = controller
+  try {
+    if (isRealtime.value)
+      await fetchRecentData(controller.signal)
+    else
+      await fetchHistoryData(controller.signal)
   }
-  else {
-    await fetchHistoryData()
+  finally {
+    if (activeRequest === controller)
+      activeRequest = null
   }
 }
+
+onScopeDispose(() => {
+  fetchRequestId++
+  activeRequest?.abort()
+})
 
 // ==================== 数据处理 ====================
 
@@ -834,7 +865,7 @@ const connectionsChartOption = computed(() => ({
       for (const item of p) {
         const colorDot = `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${item.color};margin-right:8px;flex-shrink:0"></span>`
         const displayValue = item.value != null ? Math.round(item.value) : '-'
-        html += `<div style="display:flex;align-items:center">${colorDot}<span>${item.seriesName}</span><span style="margin-left:auto;font-weight:600;margin-left:16px">${displayValue}</span></div>`
+        html += `<div style="display:flex;align-items:center">${colorDot}<span>${escapeChartText(item.seriesName)}</span><span style="margin-left:auto;font-weight:600;margin-left:16px">${displayValue}</span></div>`
       }
       html += '</div>'
       return html
@@ -956,26 +987,35 @@ const { pause: pauseRealtimeUpdate, resume: resumeRealtimeUpdate } = useInterval
 )
 
 // 根据是否为实时模式控制定时器
-watch(isRealtime, (realtime) => {
-  if (realtime) {
+watch([isRealtime, visibility], ([realtime, visible]) => {
+  if (realtime && visible === 'visible') {
     resumeRealtimeUpdate()
   }
   else {
     pauseRealtimeUpdate()
+    if (visible !== 'visible')
+      activeRequest?.abort()
   }
 }, { immediate: true })
+
+// A hidden tab cancels both realtime and historical reads. Resume the current
+// view immediately so a canceled historical read cannot leave loading stuck.
+watch(visibility, (visible) => {
+  if (visible === 'visible')
+    fetchData(true)
+})
 
 // 生命周期 ====================
 
 watch(selectedView, () => {
   isInitialLoad.value = true // 切换视图时重置首次加载状态
-  fetchData()
+  fetchData(true)
 })
 
 watch(() => props.uuid, () => {
   remoteData.value = []
   isInitialLoad.value = true // 切换节点时重置首次加载状态
-  fetchData()
+  fetchData(true)
 })
 
 onMounted(() => {
@@ -996,6 +1036,10 @@ onMounted(() => {
         </TabsTrigger>
       </TabsList>
     </Tabs>
+
+    <p v-if="!isRealtime && sourceLabel" class="text-xs text-muted-foreground" role="status">
+      {{ sourceLabel }}
+    </p>
 
     <!-- 内容区域 -->
     <Spinner :show="loading">

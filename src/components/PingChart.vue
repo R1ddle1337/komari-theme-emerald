@@ -9,7 +9,8 @@ import { Spinner } from '@/components/ui/spinner'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { useAppStore } from '@/stores/app'
-import { cutPeakValues, interpolateNullsLinear } from '@/utils/recordHelper'
+import { escapeChartText, metricSourceLabel } from '@/utils/metricPresentation'
+import { cutPeakValues } from '@/utils/recordHelper'
 import { getSharedRpc } from '@/utils/rpc'
 import '@/utils/echarts' // 共享 ECharts 配置
 
@@ -106,7 +107,7 @@ interface PingRecord {
   client: string
   task_id: number
   time: string
-  value: number
+  value: number | null
 }
 
 interface TaskInfo {
@@ -131,6 +132,8 @@ interface MetricPoint {
 }
 
 interface MetricSeries {
+  downsampled?: boolean
+  interval_seconds?: number
   metric_key: 'ping.latency_ms' | 'ping.loss'
   tags?: Record<string, string>
   tag?: Record<string, string>
@@ -166,7 +169,10 @@ const remoteData = shallowRef<PingRecord[]>([])
 const tasks = shallowRef<TaskInfo[]>([])
 const loading = ref(false)
 const error = ref<string | null>(null)
+const sourceLabel = ref('')
+const metricInterval = ref(0)
 let fetchRequestId = 0
+let activeRequest: AbortController | null = null
 
 // 任务选择
 const selectedTaskIds = ref<number[]>([])
@@ -231,6 +237,9 @@ async function fetchRecords() {
   if (!props.uuid)
     return
 
+  activeRequest?.abort()
+  const controller = new AbortController()
+  activeRequest = controller
   const requestId = ++fetchRequestId
   const uuid = props.uuid
   const hours = selectedHours.value
@@ -247,17 +256,19 @@ async function fetchRecords() {
         downsample: true,
         max_points: 500,
         aggregation: 'avg',
-      }),
+      }, { signal: controller.signal }),
       rpc.getClient().call<PingMetricStatsResponse>('public:getPingMetricStats', {
         uuid,
         hours,
         max_points: 500,
-      }),
+      }, { signal: controller.signal }),
     ])
 
     if (requestId !== fetchRequestId)
       return
 
+    sourceLabel.value = metricSourceLabel(metricResult?.series ?? [])
+    metricInterval.value = Math.max(0, ...(metricResult?.series ?? []).map(s => s.interval_seconds || 0))
     const records: PingRecord[] = []
     for (const series of metricResult?.series ?? []) {
       const taskId = Number(series.tags?.task_id ?? series.tag?.task_id)
@@ -265,12 +276,12 @@ async function fetchRecords() {
         continue
 
       for (const point of series.points ?? []) {
-        if (point.value === null)
+        if (point.value === null && series.metric_key === 'ping.loss')
           continue
 
         // A rollup can contain partial loss (0..1). It must not overwrite the
         // successful latency sample from the same bucket with a full outage.
-        if (series.metric_key === 'ping.loss' && point.value < 1)
+        if (series.metric_key === 'ping.loss' && (point.value === null || point.value < 1))
           continue
 
         records.push({
@@ -351,7 +362,7 @@ const mergedData = computed(() => {
     }
 
     const group = grouped.get(useTs)!
-    group[rec.task_id] = rec.value < 0 ? null : rec.value
+    group[rec.task_id] = rec.value === null || rec.value < 0 ? null : rec.value
   }
 
   const merged = Array.from(grouped.values()).sort(
@@ -375,7 +386,16 @@ const mergedData = computed(() => {
     }
   }
 
-  return merged.slice(startIdx)
+  const windowed = merged.slice(startIdx)
+  const expected = Math.max(metricInterval.value, Math.min(...tasks.value.map(task => task.interval).filter(interval => interval > 0)), 1)
+  const withGaps: Record<string, unknown>[] = []
+  for (const row of windowed) {
+    const previous = withGaps.at(-1)
+    if (previous && dayjs(row.time as string).valueOf() - dayjs(previous.time as string).valueOf() > expected * 3000)
+      withGaps.push({ time: dayjs(previous.time as string).add(expected, 'second').toISOString() })
+    withGaps.push(row)
+  }
+  return withGaps
 })
 
 const chartData = computed(() => {
@@ -387,14 +407,6 @@ const chartData = computed(() => {
 
   if (cutPeak.value) {
     data = cutPeakValues(data, selectedKeys)
-  }
-
-  if (selectedKeys.length > 0 && data.length > 0) {
-    data = interpolateNullsLinear(data, selectedKeys, {
-      maxGapMultiplier: 6,
-      minCapMs: 2 * 60_000,
-      maxCapMs: 30 * 60_000,
-    })
   }
 
   return data
@@ -438,7 +450,7 @@ const latestValues = computed(() => {
   for (const task of tasks.value) {
     for (let i = remoteData.value.length - 1; i >= 0; i--) {
       const rec = remoteData.value[i]
-      if (rec && rec.task_id === task.id && rec.value >= 0) {
+      if (rec && rec.task_id === task.id && rec.value !== null && rec.value >= 0) {
         latestMap.set(task.id, rec.value)
         break
       }
@@ -471,7 +483,7 @@ const packetLossMarkers = computed(() => {
 
   for (const task of selectedTasks.value) {
     const points = new Set<number>()
-    const taskLossRecords = remoteData.value.filter(rec => rec.task_id === task.id && rec.value < 0)
+    const taskLossRecords = remoteData.value.filter(rec => rec.task_id === task.id && rec.value !== null && rec.value < 0)
 
     for (const record of taskLossRecords) {
       const lossTs = dayjs(record.time).valueOf()
@@ -562,7 +574,7 @@ const pingChartOption = computed(() => {
       name: task.name,
       type: 'line' as const,
       data: data.map(d => d[task.id] as number | null ?? null),
-      smooth: showDelay.value ? (cutPeak.value ? 0.6 : 0.1) : 0,
+      smooth: showDelay.value && cutPeak.value ? 0.4 : 0,
       showSymbol: false,
       connectNulls: false,
       lineStyle: { width: showDelay.value ? 1.5 : 0, color, cap: 'round' as const },
@@ -628,7 +640,7 @@ const pingChartOption = computed(() => {
             const task = tasks.value.find(t => t.name === item.seriesName)
             const color = task ? colorMap.get(task.id) || chartColors[0] : chartColors[0]
             const colorDot = `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${color};margin-right:8px;flex-shrink:0"></span>`
-            html += `<div style="display:flex;align-items:center">${colorDot}<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${item.seriesName}</span><span style="margin-left:auto;font-weight:600;margin-left:16px;font-variant-numeric:tabular-nums">${Math.round(item.value)} ms</span></div>`
+            html += `<div style="display:flex;align-items:center">${colorDot}<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeChartText(item.seriesName)}</span><span style="margin-left:auto;font-weight:600;margin-left:16px;font-variant-numeric:tabular-nums">${Math.round(item.value)} ms</span></div>`
           }
         }
         html += '</div>'
@@ -708,6 +720,8 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  fetchRequestId++
+  activeRequest?.abort()
   coarsePointerMediaQuery?.removeEventListener('change', syncTouchTooltipMode)
 })
 </script>
@@ -746,6 +760,9 @@ onBeforeUnmount(() => {
     </Tabs>
 
     <!-- 内容区域 -->
+    <p v-if="sourceLabel" class="text-xs text-muted-foreground" role="status">
+      {{ sourceLabel }}
+    </p>
     <Spinner :show="loading" content-class="flex flex-col gap-4">
       <div v-if="error" class="text-red-500 py-8 text-center">
         {{ error }}

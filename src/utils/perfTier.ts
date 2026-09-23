@@ -14,6 +14,7 @@ import { ref } from 'vue'
 export type PerfTier = 'high' | 'medium' | 'low'
 
 const STORAGE_KEY = 'emerald-perf-tier-v1'
+const reducedMotion = typeof window === 'undefined' ? null : window.matchMedia('(prefers-reduced-motion: reduce)')
 
 function readStoredTier(): PerfTier | null {
   try {
@@ -35,7 +36,7 @@ function defaultTier(): PerfTier {
   return window.innerWidth < 768 ? 'medium' : 'high'
 }
 
-export const perfTier = ref<PerfTier>(readStoredTier() ?? defaultTier())
+export const perfTier = ref<PerfTier>(reducedMotion?.matches ? 'low' : readStoredTier() ?? defaultTier())
 
 // 模块加载即同步根类，存档 low 的用户首帧就走降级样式
 if (typeof document !== 'undefined') {
@@ -80,7 +81,16 @@ function measureFps(durationMs: number): Promise<number> {
  * App 就绪、进场动画结束后调用一次。
  * 已有存档则直接应用；否则跑 1 秒帧率探针，掉帧则降档并存档。
  */
+const handleMotionPreference = () => applyTier(reducedMotion?.matches ? 'low' : readStoredTier() ?? defaultTier(), false)
+reducedMotion?.addEventListener('change', handleMotionPreference)
+if (import.meta.hot)
+  import.meta.hot.dispose(() => reducedMotion?.removeEventListener('change', handleMotionPreference))
+
 export async function initPerfTier(): Promise<void> {
+  if (reducedMotion?.matches) {
+    applyTier('low', false)
+    return
+  }
   const stored = readStoredTier()
   if (stored) {
     applyTier(stored, false)

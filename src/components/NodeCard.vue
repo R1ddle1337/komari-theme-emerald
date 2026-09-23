@@ -91,7 +91,7 @@ function hasRegion(region: string | null | undefined): boolean {
       <div class="flex gap-2 min-w-0 items-center">
         <DataTooltip
           placement="right"
-          :content="formatUptime(props.node.uptime ?? 0)"
+          :content="`${formatUptime(props.node.uptime ?? 0)} · 最后上报：${offlineTime}`"
           class="size-2 rounded-full" :class="[props.node.online ? 'bg-green-600' : 'bg-red-600']"
           content-class="whitespace-nowrap"
         >

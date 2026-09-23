@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useDocumentVisibility, usePreferredReducedMotion } from '@vueuse/core'
 import { computed, onUnmounted, ref, watch } from 'vue'
 import ShaderBackground from '@/components/ShaderBackground.vue'
 import ShaderBackgroundLiquid from '@/components/ShaderBackgroundLiquid.vue'
@@ -89,6 +90,17 @@ function loadImage(url: string) {
 }
 
 const videoRef = ref<HTMLVideoElement | null>(null)
+const visibility = useDocumentVisibility()
+const motion = usePreferredReducedMotion()
+const playVideo = computed(() => visibility.value === 'visible' && motion.value !== 'reduce')
+watch([videoRef, playVideo], ([video, play]) => {
+  if (!video)
+    return
+  if (play)
+    void video.play().catch(() => {})
+  else
+    video.pause()
+})
 
 function handleVideoLoaded() {
   isLoaded.value = true
@@ -152,7 +164,7 @@ onUnmounted(() => {
           ref="videoRef"
           class="background-video"
           :src="currentUrl ?? undefined"
-          autoplay
+          :autoplay="playVideo"
           loop
           muted
           preload="auto"

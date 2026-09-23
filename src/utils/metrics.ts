@@ -16,7 +16,7 @@ interface MetricSeries {
   points?: { time: string, value: number | null, count?: number, tags?: Record<string, string> }[]
 }
 
-export async function getPingHistoryRecords(hours: number): Promise<PingHistoryRecord[]> {
+export async function getPingHistoryRecords(hours: number, signal?: AbortSignal): Promise<PingHistoryRecord[]> {
   const client = getSharedRpc().getClient()
   try {
     const result = await client.call<{ series?: MetricSeries[] }>('public:queryMetrics', {
@@ -24,7 +24,7 @@ export async function getPingHistoryRecords(hours: number): Promise<PingHistoryR
       hours,
       max_points: 120,
       aggregation: 'avg',
-    })
+    }, { signal })
     const records = new Map<string, PingHistoryRecord>()
     for (const series of result.series ?? []) {
       for (const point of series.points ?? []) {
@@ -50,7 +50,7 @@ export async function getPingHistoryRecords(hours: number): Promise<PingHistoryR
   catch (error) {
     if (!(error instanceof RpcError) || error.code !== -32601)
       throw error
-    const legacy = await client.call<{ records?: PingHistoryRecord[] }>('common:getRecords', { type: 'ping', hours, maxCount: 4000 })
+    const legacy = await client.call<{ records?: PingHistoryRecord[] }>('common:getRecords', { type: 'ping', hours, maxCount: 4000 }, { signal })
     return legacy.records ?? []
   }
 }

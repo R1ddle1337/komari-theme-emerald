@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { contentUrl } from '@/utils/contentUrl'
 
 const props = defineProps<{
   content: string
@@ -12,9 +13,6 @@ const ITALIC_ASTERISK_REGEX = /^\*([^*]+)\*/
 const ITALIC_UNDERSCORE_REGEX = /^_([^_]+)_/
 const CODE_REGEX = /^`([^`]+)`/
 const NEXT_SPECIAL_REGEX = /[![*_`\n]/
-const AMP_REGEX = /&/g
-const LT_REGEX = /</g
-const GT_REGEX = />/g
 
 interface Token {
   type: 'text' | 'bold' | 'italic' | 'link' | 'image' | 'code' | 'br'
@@ -34,14 +32,16 @@ function parseMarkdown(text: string): Token[] {
   while (remaining.length > 0) {
     const imageMatch = remaining.match(IMAGE_REGEX)
     if (imageMatch) {
-      tokens.push({ type: 'image', alt: imageMatch[1], url: imageMatch[2] })
+      const url = contentUrl(imageMatch[2]!, true)
+      tokens.push(url ? { type: 'image', alt: imageMatch[1], url } : { type: 'text', content: imageMatch[1] })
       remaining = remaining.slice(imageMatch[0].length)
       continue
     }
 
     const linkMatch = remaining.match(LINK_REGEX)
     if (linkMatch) {
-      tokens.push({ type: 'link', content: linkMatch[1], url: linkMatch[2] })
+      const url = contentUrl(linkMatch[2]!)
+      tokens.push({ type: url ? 'link' : 'text', content: linkMatch[1], url })
       remaining = remaining.slice(linkMatch[0].length)
       continue
     }
@@ -75,27 +75,20 @@ function parseMarkdown(text: string): Token[] {
 
     const nextSpecial = remaining.search(NEXT_SPECIAL_REGEX)
     if (nextSpecial === -1) {
-      tokens.push({ type: 'text', content: escapeHtml(remaining) })
+      tokens.push({ type: 'text', content: remaining })
       break
     }
     else if (nextSpecial === 0) {
-      tokens.push({ type: 'text', content: escapeHtml(remaining[0]!) })
+      tokens.push({ type: 'text', content: remaining[0]! })
       remaining = remaining.slice(1)
     }
     else {
-      tokens.push({ type: 'text', content: escapeHtml(remaining.slice(0, nextSpecial)) })
+      tokens.push({ type: 'text', content: remaining.slice(0, nextSpecial) })
       remaining = remaining.slice(nextSpecial)
     }
   }
 
   return tokens
-}
-
-function escapeHtml(text: string): string {
-  return text
-    .replace(AMP_REGEX, '&amp;')
-    .replace(LT_REGEX, '&lt;')
-    .replace(GT_REGEX, '&gt;')
 }
 
 const tokens = computed(() => parseMarkdown(props.content))
@@ -109,6 +102,8 @@ const tokens = computed(() => parseMarkdown(props.content))
         :src="token.url"
         :alt="token.alt"
         loading="lazy"
+        decoding="async"
+        referrerpolicy="no-referrer"
         class="align-middle h-auto max-w-full inline-block rounded"
         style="max-height: 200px;"
       >
