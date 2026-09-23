@@ -161,47 +161,21 @@ const me = await rpc.getMe()
 const { count, records } = await rpc.getNodeRecentStatus('uuid-xxx')
 ```
 
-#### `getRecords(params: GetRecordsParams): Promise<...>`
-
-获取历史记录（负载或 Ping），支持多种参数组合。
+#### 历史指标与统计
 
 ```typescript
-// 获取负载记录
-const loadRecords = await rpc.getRecords({
-  type: 'load',
-  uuid: 'uuid-xxx',
+const history = await rpc.getClient().call('public:queryMetrics', {
+  metric_keys: ['cpu.usage'],
+  entity_id: 'uuid-xxx',
   hours: 24,
-  load_type: 'cpu',
 })
-
-// 获取 Ping 记录
-const pingRecords = await rpc.getRecords({
-  type: 'ping',
-  hours: 1,
-  task_id: -1,
+const stats = await rpc.getClient().call('public:getPingMetricStats', {
+  entity_id: 'uuid-xxx',
+  hours: 24,
 })
 ```
 
-#### `getLoadRecords(uuid?, hours?, loadType?, maxCount?): Promise<LoadRecordsResult | LoadRecordsMapResult>`
-
-便捷方法：获取负载历史记录。
-
-```typescript
-// 获取所有节点最近 1 小时的负载记录
-const records = await rpc.getLoadRecords()
-
-// 获取指定节点最近 24 小时的 CPU 记录
-const cpuRecords = await rpc.getLoadRecords('uuid-xxx', 24, 'cpu')
-```
-
-#### `getPingRecords(taskId?, hours?, maxCount?): Promise<PingRecordsResult>`
-
-便捷方法：获取 Ping 历史记录。
-
-```typescript
-// 获取所有任务最近 1 小时的 Ping 记录
-const pingRecords = await rpc.getPingRecords()
-```
+Komari 2.0 使用唯一的 `points_v1` 传输格式；客户端在 HTTP 边界解码为图表对象。Ping 分位数和标准差直接使用服务端的全时段统计。
 
 ## 类型定义
 

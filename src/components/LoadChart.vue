@@ -15,7 +15,7 @@ import { useNodesStore } from '@/stores/nodes'
 import { formatBytes, formatBytesSplit } from '@/utils/helper'
 import { escapeChartText, metricSourceLabel } from '@/utils/metricPresentation'
 import { fillMissingTimePoints } from '@/utils/recordHelper'
-import { getSharedRpc, RpcError } from '@/utils/rpc'
+import { getSharedRpc } from '@/utils/rpc'
 import '@/utils/echarts' // 共享 ECharts 配置
 
 const props = defineProps<{
@@ -178,7 +178,6 @@ interface MetricSeries {
   interval_seconds?: number
   metric_key: string
   tags?: Record<string, string>
-  tag?: Record<string, string>
   points: MetricPoint[]
 }
 
@@ -343,63 +342,23 @@ async function fetchHistoryData(signal: AbortSignal) {
   loading.value = true
   error.value = null
 
-  // 优先走 metric store（Komari 1.2.5+，服务端降采样，传输量小一个量级）
   try {
     const records = await fetchHistoryFromMetrics(hours, signal)
     if (requestId !== fetchRequestId || signal.aborted)
       return
-    if (records) {
-      metricData.value = records
-      remoteData.value = []
-      loading.value = false
-      return
-    }
-  }
-  catch (cause) {
-    if (requestId !== fetchRequestId || signal.aborted)
-      return
-    if (!(cause instanceof RpcError) || cause.code !== -32601) {
-      error.value = cause instanceof Error ? cause.message : '获取数据失败'
-      loading.value = false
-      return
-    }
-    // Only an unsupported method warrants using the legacy endpoint.
-  }
-
-  if (requestId !== fetchRequestId || signal.aborted)
-    return
-
-  try {
-    const apiBase = import.meta.env.VITE_API_BASE
-    const response = await fetch(`${apiBase}/records/load?uuid=${encodeURIComponent(props.uuid)}&hours=${hours}`, { signal })
-
-    if (!response.ok) {
-      throw new Error(`HTTP error: ${response.status}`)
-    }
-
-    const resp = await response.json()
-    if (requestId !== fetchRequestId || signal.aborted)
-      return
-    const records = resp.data?.records || []
-
-    // 按时间排序
-    records.sort((a: StatusRecord, b: StatusRecord) =>
-      dayjs(a.time).valueOf() - dayjs(b.time).valueOf(),
-    )
-
-    metricData.value = null
-    remoteData.value = records
+    metricData.value = records
+    remoteData.value = []
   }
   catch (err) {
     if (requestId !== fetchRequestId || signal.aborted)
       return
     error.value = err instanceof Error ? err.message : '获取数据失败'
+    metricData.value = null
     remoteData.value = []
   }
   finally {
-    if (requestId === fetchRequestId && !signal.aborted) {
+    if (requestId === fetchRequestId && !signal.aborted)
       loading.value = false
-    }
   }
 }
 

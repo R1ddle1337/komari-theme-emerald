@@ -114,22 +114,6 @@ export interface VersionInfo {
   hash: string
 }
 
-/**
- * 单个 Ping 任务的最新探测汇总
- * 注意：该字段在 getNodesLatestStatus 响应中实际存在，但官方文档与旧类型定义遗漏，键为 task_id 字符串
- */
-export interface NodeStatusPing {
-  name: string
-  /** 最新探测延迟（毫秒）；<0 表示丢包，与 PingRecord.value === -1 同义 */
-  latest: number
-  avg: number
-  tail: number
-  /** 丢包率（%） */
-  loss: number
-  min: number
-  max: number
-}
-
 /** 节点状态 */
 export interface NodeStatus {
   client: string
@@ -156,7 +140,6 @@ export interface NodeStatus {
   online: boolean
   uptime: number
   /** 各 Ping 任务最新探测汇总，键为 task_id 字符串 */
-  ping?: Record<string, NodeStatusPing>
 }
 
 /** 状态记录 */
@@ -240,8 +223,6 @@ export class RpcClient {
    * 调用 RPC 方法（HTTP POST）
    */
   private async callHttp<T>(method: string, params?: Record<string, unknown> | unknown[], signal?: AbortSignal): Promise<T> {
-    if (method === 'public:queryMetrics' && params && !Array.isArray(params))
-      params = { compact: true, ...params }
     const id = ++this.requestId
     const request: JsonRpcRequest = {
       jsonrpc: '2.0',
@@ -439,7 +420,7 @@ export class RpcClient {
    */
   async call<T>(method: string, params?: Record<string, unknown> | unknown[], options: { signal?: AbortSignal } = {}): Promise<T> {
     // History queries must not block live status on the server's serial WS.
-    if (options.signal || method === 'public:queryMetrics' || method === 'public:getPingMetricStats' || method === 'common:getRecords') {
+    if (options.signal || method === 'public:queryMetrics' || method === 'public:getPingMetricStats') {
       return this.callHttp<T>(method, params, options.signal)
     }
     if (this.useWebSocket) {
@@ -612,47 +593,6 @@ export class KomariRpc {
    */
   async getBackendVersion(): Promise<VersionInfo> {
     return this.client.call<VersionInfo>('common:getBackendVersion')
-  }
-
-  // ==================== 历史记录方法 ====================
-
-  /**
-   * 获取历史记录（通用方法）
-   */
-  async getRecords(params: {
-    type: 'load' | 'ping'
-    uuid?: string
-    hours?: number
-    task_id?: number
-    load_type?: string
-    max_count?: number
-  }): Promise<unknown> {
-    return this.client.call('common:getRecords', params)
-  }
-
-  /**
-   * 获取负载记录
-   */
-  async getLoadRecords(uuid?: string, hours?: number, loadType?: string, maxCount?: number): Promise<{ records: StatusRecord[] }> {
-    return this.client.call<{ records: StatusRecord[] }>('common:getRecords', {
-      type: 'load',
-      uuid,
-      hours,
-      load_type: loadType,
-      maxCount,
-    })
-  }
-
-  /**
-   * 获取 Ping 记录
-   */
-  async getPingRecords(taskId?: number, hours?: number, maxCount?: number): Promise<{ records: PingRecord[] }> {
-    return this.client.call<{ records: PingRecord[] }>('common:getRecords', {
-      type: 'ping',
-      task_id: taskId,
-      hours,
-      maxCount,
-    })
   }
 
   /**

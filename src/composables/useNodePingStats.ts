@@ -1,8 +1,8 @@
 import type { MaybeRefOrGetter } from 'vue'
-import type { PingHistoryRecord } from '@/utils/metrics'
+import type { PingHistoryRecord, PingSummary } from '@/utils/metrics'
 import { useThrottleFn } from '@vueuse/core'
 import { computed, onActivated, onDeactivated, onScopeDispose, ref, shallowRef, toValue, watch } from 'vue'
-import { getPingHistoryRecords, pingAverageLatency, pingLostCount, pingSampleCount } from '@/utils/metrics'
+import { getPingHistoryRecords, getPingSummaries, pingAverageLatency, pingLostCount, pingSampleCount } from '@/utils/metrics'
 
 export interface NodePingHistoryPoint {
   time: string
@@ -22,6 +22,7 @@ type PingRecord = PingHistoryRecord
 
 interface SharedPingRecordsState {
   recordsByClient: Map<string, PingRecord[]>
+  summaries: PingSummary[]
 }
 
 interface SharedPingRecordsEntry {
@@ -37,16 +38,10 @@ interface SharedPingRecordsEntry {
 }
 
 const HISTORY_BUCKET_COUNT = 20
-const CACHE_VERSION = 7
+const CACHE_VERSION = 8
 const CACHE_KEY_PREFIX = 'komari-theme-emerald:node-ping-stats'
-const FULL_LOSS_EPSILON = 1e-6
 const PING_RECORD_REFRESH_INTERVAL_MS = 60_000
 const sharedPingRecordsCache = new Map<number, SharedPingRecordsEntry>()
-
-interface TaskRecordSummary {
-  total: number
-  success: number
-}
 
 function createEmptyStats(): NodePingStatsState {
   return {
@@ -62,33 +57,6 @@ function average(values: number[]): number {
   if (!values.length)
     return 0
   return values.reduce((sum, value) => sum + value, 0) / values.length
-}
-
-function isFiniteNumber(value: unknown): value is number {
-  return typeof value === 'number' && Number.isFinite(value)
-}
-
-function summarizeTaskRecords(records: PingRecord[]): Map<number, TaskRecordSummary> {
-  const summaries = new Map<number, TaskRecordSummary>()
-
-  for (const record of records) {
-    const summary = summaries.get(record.task_id) ?? { total: 0, success: 0 }
-    summary.total += pingSampleCount(record)
-    summary.success += pingSampleCount(record) - pingLostCount(record)
-    summaries.set(record.task_id, summary)
-  }
-
-  return summaries
-}
-
-function getIncludedTaskIds(records: PingRecord[]): Set<number> {
-  const recordSummaries = summarizeTaskRecords(records)
-
-  return new Set(
-    [...recordSummaries.entries()]
-      .filter(([, summary]) => summary.total > 0 && summary.success > 0)
-      .map(([taskId]) => taskId),
-  )
 }
 
 function getCacheKey(uuid: string, hours: number): string {
@@ -215,10 +183,11 @@ async function loadSharedPingRecords(entry: SharedPingRecordsEntry, hours: numbe
   const signal = entry.controller.signal
   entry.promise = (async () => {
     try {
-      const records = await getPingHistoryRecords(hours, signal)
+      const [records, summaries] = await Promise.all([getPingHistoryRecords(hours, signal), getPingSummaries(hours, signal)])
 
       entry.data.value = {
         recordsByClient: buildRecordsByClient(records),
+        summaries,
       }
       entry.lastFetchedAt = Date.now()
     }
@@ -323,7 +292,7 @@ function buildPingHistory(records: PingRecord[]): NodePingHistoryPoint[] {
   const firstTime = sortedRecords[0]?.timestamp ?? 0
   const lastTime = sortedRecords.at(-1)?.timestamp ?? firstTime
   // 桶宽必须不小于探测周期，否则桶与采样点产生拍频，周期性出现空桶（灰色 N/A）。
-  // Komari 1.2.6 起 getRecords 只返回近期十几分钟样本，固定 20 桶时桶宽会小于周期。
+  // 按可用样本的时间间距调整图形桶宽。
   const sampleIntervalMs = estimateSampleIntervalMs(sortedRecords)
   const minBucketMs = sampleIntervalMs * 1.2
   let bucketCount = Math.min(HISTORY_BUCKET_COUNT, sortedRecords.length)
@@ -355,85 +324,16 @@ function buildPingHistory(records: PingRecord[]): NodePingHistoryPoint[] {
   })
 }
 
-function getPercentile(values: number[], percentile: number): number | null {
-  if (!values.length)
-    return null
-
-  const sorted = [...values].sort((left, right) => left - right)
-  const position = Math.min(sorted.length - 1, Math.max(0, (sorted.length - 1) * percentile))
-  const lowerIndex = Math.floor(position)
-  const upperIndex = Math.ceil(position)
-  const lowerValue = sorted[lowerIndex]
-  const upperValue = sorted[upperIndex]
-
-  if (lowerValue === undefined || upperValue === undefined)
-    return null
-  if (lowerIndex === upperIndex)
-    return lowerValue
-
-  return lowerValue + (upperValue - lowerValue) * (position - lowerIndex)
-}
-
-function buildStats(records: PingRecord[]): NodePingStatsState {
-  const includedTaskIds = getIncludedTaskIds(records)
-
-  if (!includedTaskIds.size)
-    return createEmptyStats()
-
-  const filteredRecords = records.filter(record => includedTaskIds.has(record.task_id))
-  const history = buildPingHistory(filteredRecords)
-  const taskRecords = new Map<number, PingRecord[]>()
-
-  for (const record of filteredRecords) {
-    const currentRecords = taskRecords.get(record.task_id) ?? []
-    currentRecords.push(record)
-    taskRecords.set(record.task_id, currentRecords)
-  }
-
-  const latencyValues: number[] = []
-  const taskLossValues: number[] = []
-  const volatilityValues: number[] = []
-
-  for (const recordsByTask of taskRecords.values()) {
-    const validValues = recordsByTask
-      .map(record => record.value)
-      .filter(value => value >= 0)
-
-    if (!validValues.length)
-      continue
-
-    latencyValues.push(pingAverageLatency(recordsByTask))
-    const samples = recordsByTask.reduce((total, record) => total + pingSampleCount(record), 0)
-    const lost = recordsByTask.reduce((total, record) => total + pingLostCount(record), 0)
-    taskLossValues.push(lost / samples * 100)
-
-    if (validValues.length > 1) {
-      const p50 = getPercentile(validValues, 0.5)
-      const p99 = getPercentile(validValues, 0.99)
-      if (isFiniteNumber(p50) && isFiniteNumber(p99) && p50 > FULL_LOSS_EPSILON) {
-        volatilityValues.push(p99 / p50)
-      }
-    }
-  }
-
-  const historyLatencyValues = history
-    .map(point => point.latency)
-    .filter(isFiniteNumber)
-  const historyLossValues = history
-    .map(point => point.loss)
-    .filter(isFiniteNumber)
-
-  const avgLatency = latencyValues.length ? average(latencyValues) : average(historyLatencyValues)
-  const avgLoss = taskLossValues.length ? average(taskLossValues) : average(historyLossValues)
-  const avgVolatility = average(volatilityValues)
-  const hasData = history.length > 0 || latencyValues.length > 0 || taskLossValues.length > 0
-
+function buildStats(records: PingRecord[], summaries: PingSummary[]): NodePingStatsState {
+  const usable = summaries.filter(stat => !stat.loss_approximate && stat.total > 0)
+  const valid = usable.reduce((sum, stat) => sum + stat.valid, 0)
+  const total = usable.reduce((sum, stat) => sum + stat.total, 0)
   return {
-    avgLatency,
-    avgLoss,
-    avgVolatility,
-    history,
-    hasData,
+    avgLatency: valid ? usable.reduce((sum, stat) => sum + (stat.avg ?? 0) * stat.valid, 0) / valid : 0,
+    avgLoss: total ? usable.reduce((sum, stat) => sum + stat.loss * stat.total, 0) / total : 0,
+    avgVolatility: average(usable.filter(stat => stat.valid > 0).map(stat => stat.p99_p50_ratio)),
+    history: buildPingHistory(records),
+    hasData: total > 0,
   }
 }
 
@@ -483,7 +383,7 @@ export function useNodePingStats(
     syncSharedRecordsSubscription(null)
   })
 
-  // stats 由共享 getRecords 的近期样本派生，不将结果视为完整的 hours 时段数据。
+  // 全时段统计由服务端统一计算，图形使用同一时段的降采样序列。
   const stats = computed<NodePingStatsState>(() => {
     const { uuid: nodeUuid, hours, enabled } = resolved.value
     if (!enabled || !nodeUuid.trim())
@@ -497,7 +397,7 @@ export function useNodePingStats(
       return readStatsCache(nodeUuid, hours) ?? createEmptyStats()
 
     const records = state.recordsByClient.get(nodeUuid) ?? []
-    return records.length ? buildStats(records) : createEmptyStats()
+    return buildStats(records, state.summaries.filter(stat => stat.entity_id === nodeUuid))
   })
 
   // 副作用：按需触发首次共享加载并维护 loading/error，不再命令式写入 stats。

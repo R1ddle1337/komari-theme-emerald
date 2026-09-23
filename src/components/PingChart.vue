@@ -136,7 +136,6 @@ interface MetricSeries {
   interval_seconds?: number
   metric_key: 'ping.latency_ms' | 'ping.loss'
   tags?: Record<string, string>
-  tag?: Record<string, string>
   points: MetricPoint[]
 }
 
@@ -260,7 +259,6 @@ async function fetchRecords() {
       rpc.getClient().call<PingMetricStatsResponse>('public:getPingMetricStats', {
         uuid,
         hours,
-        max_points: 500,
       }, { signal: controller.signal }),
     ])
 
@@ -271,7 +269,7 @@ async function fetchRecords() {
     metricInterval.value = Math.max(0, ...(metricResult?.series ?? []).map(s => s.interval_seconds || 0))
     const records: PingRecord[] = []
     for (const series of metricResult?.series ?? []) {
-      const taskId = Number(series.tags?.task_id ?? series.tag?.task_id)
+      const taskId = Number(series.tags?.task_id)
       if (!Number.isInteger(taskId))
         continue
 
