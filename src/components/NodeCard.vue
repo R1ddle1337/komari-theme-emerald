@@ -2,12 +2,11 @@
 import type { NodeData } from '@/stores/nodes'
 import { Icon } from '@iconify/vue'
 import { computed } from 'vue'
-import PingBars from '@/components/PingBars.vue'
+import CarrierLatency from '@/components/CarrierLatency.vue'
 import { Badge } from '@/components/ui/badge'
 import { CardX } from '@/components/ui/card-x'
 import { DataTooltip } from '@/components/ui/data-tooltip'
 import { ProgressThin } from '@/components/ui/progress-thin'
-import { useNodePingDisplay } from '@/composables/useNodePingDisplay'
 import { useAppStore } from '@/stores/app'
 import { formatBytesPerSecondWithConfig, formatBytesWithConfig, formatDateTime, formatRelativeTime, formatUptimeWithFormat, getStatus } from '@/utils/helper'
 import { nodeTrafficUsed } from '@/utils/nodeHealth'
@@ -31,15 +30,6 @@ const memPercentage = computed(() => (props.node.ram ?? 0) / (props.node.mem_tot
 const memStatus = computed(() => getStatus(memPercentage.value))
 const diskPercentage = computed(() => (props.node.disk ?? 0) / (props.node.disk_total || 1) * 100)
 const diskStatus = computed(() => getStatus(diskPercentage.value))
-
-const {
-  latencyRenderBars,
-  lossRenderBars,
-  latencyDisplay,
-  lossDisplay,
-  latencyPanelTooltip,
-  lossPanelTooltip,
-} = useNodePingDisplay(() => props.node.uuid)
 
 function showTrafficProgress(node: NodeData): boolean {
   return node.traffic_limit > 0
@@ -274,31 +264,8 @@ function hasRegion(region: string | null | undefined): boolean {
             <Icon icon="tabler:clock-hour-4" width="12" height="12" />
             <span>{{ formatUptime(props.node.uptime ?? 0) }}</span>
           </div>
-          <!-- 延迟 -->
-          <div
-            class="group/panel relative col-span-3 flex flex-col gap-1.5 p-1.5 h-10 rounded-sm bg-slate-500/5"
-            :class="[!props.node.online ? 'blur-xs opacity-60' : '']" :title="latencyPanelTooltip"
-          >
-            <div class="flex items-center justify-between gap-2 text-[11px] leading-none relative">
-              <span class="text-muted-foreground">延迟</span>
-              <span class="font-medium text-foreground/85">{{ latencyDisplay }}</span>
-            </div>
-            <div class="h-full min-h-0 opacity-80 group-hover/panel:opacity-100">
-              <PingBars :bars="latencyRenderBars" />
-            </div>
-          </div>
-          <!-- 丢包 -->
-          <div
-            class="group/panel relative col-span-3 flex flex-col gap-1.5 p-1.5 h-10 rounded-sm bg-slate-500/5"
-            :class="[!props.node.online ? 'blur-xs opacity-60' : '']" :title="lossPanelTooltip"
-          >
-            <div class="flex items-center justify-between gap-2 text-[11px] leading-none">
-              <span class="text-muted-foreground">丢包</span>
-              <span class="font-medium text-foreground/85">{{ lossDisplay }}</span>
-            </div>
-            <div class="h-full min-h-0 opacity-80 group-hover/panel:opacity-100">
-              <PingBars :bars="lossRenderBars" />
-            </div>
+          <div class="col-span-6 min-w-0">
+            <CarrierLatency :uuid="props.node.uuid" :online="props.node.online" />
           </div>
         </div>
         <div v-if="customTags.length > 0" class="flex shrink-0 flex-wrap gap-1 items-center">

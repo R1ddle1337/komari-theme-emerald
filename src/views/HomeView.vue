@@ -2,7 +2,7 @@
 import type { NodeHealthFilter } from '@/utils/nodeHealth'
 import { Icon } from '@iconify/vue'
 import { useDebounceFn, useNow } from '@vueuse/core'
-import { computed, defineAsyncComponent, nextTick, onActivated, onDeactivated, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, nextTick, onActivated, onDeactivated, onMounted, onScopeDispose, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import MarkdownRenderer from '@/components/MarkdownRenderer.vue'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -11,6 +11,7 @@ import { Empty } from '@/components/ui/empty'
 import { Input } from '@/components/ui/input'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useAppStore } from '@/stores/app'
+import { useCarrierPingStore } from '@/stores/carrierPing'
 import { useNodesStore } from '@/stores/nodes'
 import { getCountryCodeFromRegion } from '@/utils/geoHelper'
 import { isNodeInGroup, parseNodeGroups } from '@/utils/groupHelper'
@@ -31,6 +32,11 @@ const nodeItemStaggerLimit = 12
 const appStore = useAppStore()
 const nodesStore = useNodesStore()
 const router = useRouter()
+const carrierPing = useCarrierPingStore()
+onMounted(carrierPing.start)
+onActivated(carrierPing.start)
+onDeactivated(carrierPing.stop)
+onScopeDispose(carrierPing.stop)
 
 onActivated(() => {
   if (appStore.homeScrollPosition > 0) {
@@ -281,6 +287,22 @@ function getNodeItemTransitionStyle(index: number): Record<string, string> {
             >
               {{ filter.label }} <span class="opacity-60">{{ filter.count }}</span>
             </button>
+          </div>
+          <div class="flex flex-wrap items-center gap-2 text-xs pointer-events-auto">
+            <label for="ping-region" class="text-muted-foreground">延迟测点</label>
+            <select
+              id="ping-region" v-model="carrierPing.selectedRegion" aria-label="延迟测点地区"
+              :disabled="!carrierPing.regions.length"
+              class="h-7 rounded-md border-0 bg-background/60 px-2 text-foreground ring-1 ring-foreground/10 focus-visible:outline-2 focus-visible:outline-emerald-500"
+            >
+              <option v-if="!carrierPing.regions.length" value="">
+                {{ carrierPing.loading ? '加载中' : '暂无测点' }}
+              </option>
+              <option v-for="region in carrierPing.regions" :key="region" :value="region">
+                {{ region }}
+              </option>
+            </select>
+            <span class="text-[11px] text-muted-foreground">电信 / 联通 / 移动 · 近 5 分钟均值</span>
           </div>
           <!-- 卡片视图排序 chips -->
           <div v-if="appStore.nodeViewMode === 'card'" class="sort-chips flex gap-1 overflow-x-auto -mt-1 pointer-events-auto">

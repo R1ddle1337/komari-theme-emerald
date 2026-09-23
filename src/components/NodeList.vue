@@ -3,7 +3,7 @@ import type { NodeData } from '@/stores/nodes'
 import { Icon } from '@iconify/vue'
 import { useMediaQuery } from '@vueuse/core'
 import { computed, ref } from 'vue'
-import NodePingListCell from '@/components/NodePingListCell.vue'
+import CarrierLatency from '@/components/CarrierLatency.vue'
 import TrafficProgress from '@/components/TrafficProgress.vue'
 import { Badge } from '@/components/ui/badge'
 import { DataTooltip } from '@/components/ui/data-tooltip'
@@ -38,7 +38,7 @@ const columns: ColumnConfig[] = [
   { key: 'status', label: '状态', width: '36px', sortable: false },
   { key: 'os', label: '系统', width: '36px', sortable: false },
   { key: 'name', label: '节点', width: 'minmax(170px, 1.2fr)', sortable: true },
-  { key: 'uptime', label: '运行时间', width: 'minmax(100px, 0.6fr)', sortable: true },
+  { key: 'uptime', label: '运行时间', width: 'minmax(145px, 0.8fr)', sortable: true },
   { key: 'cpu', label: 'CPU', width: 'minmax(110px, 1fr)', sortable: true },
   { key: 'mem', label: '内存', width: 'minmax(120px, 1fr)', sortable: true },
   { key: 'disk', label: '硬盘', width: 'minmax(120px, 1fr)', sortable: true },
@@ -264,17 +264,12 @@ function filterByTag(tag: string) {
                 </div>
               </div>
 
-              <!-- 延迟/丢包 -->
-              <!-- <div v-else-if="col.key === 'ping'">
-              <NodePingListCell :uuid="node.uuid" :online="node.online" />
-            </div> -->
-
               <!-- 运行时间 -->
               <div v-else-if="col.key === 'uptime'" class="flex flex-col gap-0.5">
                 <span class="text-[10px] text-muted-foreground truncate">
                   {{ formatUptime(node.uptime ?? 0) }}
                 </span>
-                <NodePingListCell :uuid="node.uuid" :online="node.online" />
+                <CarrierLatency compact :uuid="node.uuid" :online="node.online" />
               </div>
 
               <!-- 操作系统 -->
@@ -527,13 +522,13 @@ function filterByTag(tag: string) {
             </div>
           </div>
 
-          <!-- 第四行：运行时间 + ping 诊断条 -->
+          <!-- 第四行：运行时间 + 三网延迟 -->
           <div class="flex items-center gap-2 min-w-0">
             <span class="text-[10px] text-muted-foreground shrink-0">
               {{ formatUptime(node.uptime ?? 0) }}
             </span>
             <div class="flex-1 min-w-0">
-              <NodePingListCell :uuid="node.uuid" :online="node.online" />
+              <CarrierLatency compact :uuid="node.uuid" :online="node.online" />
             </div>
           </div>
         </div>

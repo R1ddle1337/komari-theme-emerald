@@ -1,0 +1,126 @@
+<script setup lang="ts">
+import type { CarrierReading } from '@/utils/carrierPing'
+import { Icon } from '@iconify/vue'
+import { PopoverClose, PopoverContent, PopoverPortal, PopoverRoot, PopoverTrigger } from 'reka-ui'
+import { computed } from 'vue'
+import { useCarrierPingStore } from '@/stores/carrierPing'
+import { carrierReading, CARRIERS } from '@/utils/carrierPing'
+
+const props = defineProps<{ uuid: string, online: boolean, compact?: boolean }>()
+const ping = useCarrierPingStore()
+const rows = computed(() => ping.regions.map(region => ({
+  region,
+  carriers: CARRIERS.map(carrier => ({ ...carrier, ...carrierReading(ping.carrierTasks, ping.byNode.get(props.uuid) ?? [], region, carrier.id) })),
+})))
+const selected = computed(() => rows.value.find(row => row.region === ping.selectedRegion)?.carriers ?? CARRIERS.map(carrier => ({ ...carrier, latency: null, loss: null, samples: 0, targets: 0 })))
+
+function label(reading: CarrierReading) {
+  if (!props.online)
+    return '离线'
+  if (!ping.enabled)
+    return '未启用'
+  if (ping.error)
+    return '更新失败'
+  if (!ping.updatedAt && ping.loading)
+    return '加载中'
+  if (!reading.targets || !reading.samples)
+    return '—'
+  if (reading.latency === null)
+    return reading.loss === 100 ? '不可达' : '—'
+  return `${Math.round(reading.latency)} ms`
+}
+
+function lossLabel(reading: CarrierReading) {
+  if (!props.online || !ping.enabled || ping.error)
+    return ''
+  if (!reading.targets)
+    return '未配置'
+  if (reading.loss === null)
+    return '暂无样本'
+  return `${reading.loss.toFixed(1)}% 丢包`
+}
+
+function tone(reading: CarrierReading) {
+  if (!props.online || ping.error || !ping.enabled || !reading.samples)
+    return 'text-muted-foreground'
+  return reading.loss === 100 ? 'text-red-500' : reading.loss && reading.loss > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-foreground/90'
+}
+</script>
+
+<template>
+  <PopoverRoot>
+    <PopoverTrigger as-child>
+      <button
+        type="button" data-carrier-latency :data-node="uuid"
+        :aria-label="`查看${ping.selectedRegion || ''}三网延迟和各地对比`"
+        class="w-full min-w-0 rounded-md bg-slate-500/5 text-left hover:bg-slate-500/10 focus-visible:outline-2 focus-visible:outline-emerald-500"
+        :class="compact ? 'px-1 py-1' : 'p-2'"
+        @click.stop @keydown.stop
+      >
+        <span v-if="!compact" class="mb-1.5 flex items-center justify-between gap-1 text-[10px] text-muted-foreground">
+          <span>{{ ping.selectedRegion || '测点' }}三网</span>
+          <span class="inline-flex items-center gap-0.5">近 5 分钟 <Icon icon="tabler:chevron-down" width="12" /></span>
+        </span>
+        <span class="grid grid-cols-3 gap-1">
+          <span v-for="carrier in selected" :key="carrier.id" class="flex min-w-0 flex-col gap-0.5" :data-carrier="carrier.id">
+            <span class="text-[10px] text-muted-foreground">{{ carrier.name }}</span>
+            <span class="whitespace-nowrap font-medium tabular-nums" :class="[compact ? 'text-[10px]' : 'text-xs', tone(carrier)]">{{ label(carrier) }}</span>
+            <span v-if="!compact" class="text-[9px] text-muted-foreground tabular-nums">{{ lossLabel(carrier) }}</span>
+          </span>
+        </span>
+      </button>
+    </PopoverTrigger>
+    <PopoverPortal>
+      <PopoverContent
+        side="bottom" align="center" :side-offset="6" :collision-padding="12"
+        class="z-50 w-[min(23rem,calc(100vw-1.5rem))] rounded-xl border bg-background p-3 text-foreground shadow-xl outline-none"
+        aria-label="各地三网延迟" @click.stop
+      >
+        <div class="mb-2 flex items-center justify-between gap-2">
+          <span class="text-sm font-medium">各地三网延迟</span>
+          <PopoverClose aria-label="关闭延迟对比" class="rounded p-1 text-muted-foreground hover:bg-muted focus-visible:outline-2">
+            <Icon icon="tabler:x" width="14" />
+          </PopoverClose>
+        </div>
+        <p v-if="!online" class="mb-2 text-xs text-muted-foreground">
+          节点已离线，暂无当前延迟。
+        </p>
+        <table class="w-full table-fixed text-center text-xs">
+          <thead>
+            <tr class="text-muted-foreground">
+              <th class="py-1 text-left font-normal">
+                测点地区
+              </th>
+              <th v-for="carrier in CARRIERS" :key="carrier.id" class="font-normal">
+                {{ carrier.name }}
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="row in rows" :key="row.region" :class="row.region === ping.selectedRegion ? 'bg-muted/60' : ''">
+              <th class="py-2 text-left font-medium">
+                {{ row.region }}
+              </th>
+              <td v-for="reading in row.carriers" :key="reading.id" class="py-2 tabular-nums">
+                <div :class="tone(reading)">
+                  {{ label(reading) }}
+                </div>
+                <div class="mt-0.5 text-[9px] text-muted-foreground">
+                  {{ lossLabel(reading) }}
+                </div>
+              </td>
+            </tr>
+            <tr v-if="!rows.length">
+              <td colspan="4" class="py-4 text-muted-foreground">
+                {{ ping.loading ? '正在加载测点…' : '暂无三网测点' }}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        <p class="mt-2 text-[10px] leading-relaxed text-muted-foreground">
+          节点到各地测点的近 5 分钟平均延迟，每分钟刷新。可在首页切换统一比较的测点地区。
+        </p>
+      </PopoverContent>
+    </PopoverPortal>
+  </PopoverRoot>
+</template>
