@@ -2,7 +2,7 @@
   "name": "Komari Emerald",
   "short": "Emerald",
   "description": "An emerald theme for Komari",
-  "version": "2.3.1",
+  "version": "2.3.2",
   "author": "Riddle & Tokinx",
   "url": "https://github.com/R1ddle1337/komari-theme-emerald",
   "preview": "preview.png",
@@ -135,6 +135,13 @@
         "type": "switch",
         "default": false,
         "help": "减少页面过渡动画效果，提升访问速度和响应性"
+      },
+      {
+        "key": "enableGlassEffect",
+        "name": "毛玻璃特效",
+        "type": "switch",
+        "default": true,
+        "help": "卡片使用半透明背景与背景模糊，保留 Shader 的色彩层次"
       },
       {
         "name": "备案设置",

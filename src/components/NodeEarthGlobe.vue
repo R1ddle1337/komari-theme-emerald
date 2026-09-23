@@ -1,239 +1,713 @@
 <script setup lang="ts">
-import type { Arc, COBEOptions, Globe } from 'cobe'
+import type { Arc, COBEOptions, Globe, Marker } from 'cobe'
 import type { NodeData } from '@/stores/nodes'
 import { Icon } from '@iconify/vue'
-import { useDocumentVisibility, useElementSize, useElementVisibility, useRafFn } from '@vueuse/core'
+import {
+  useDocumentVisibility,
+  useElementSize,
+  useElementVisibility,
+  usePreferredReducedMotion,
+  useRafFn,
+} from '@vueuse/core'
 import createGlobe from 'cobe'
-import { computed, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, watch } from 'vue'
+import { computed, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, shallowRef, watch } from 'vue'
 import { useAppStore } from '@/stores/app'
+import { useNodesStore } from '@/stores/nodes'
 import { getCoordByCode, getCountryCodeFromRegion } from '@/utils/geoHelper'
+import { formatBytesPerSecondSplit } from '@/utils/helper'
 import { perfTier } from '@/utils/perfTier'
-import { getRegionDisplayName } from '@/utils/regionHelper'
 
-const props = defineProps<{ nodes: NodeData[] }>()
-const app = useAppStore()
-const container = ref<HTMLDivElement>()
-const canvas = ref<HTMLCanvasElement>()
-const { width, height } = useElementSize(container)
-const visibility = useDocumentVisibility()
-const inView = useElementVisibility(container)
+const props = defineProps<{
+  nodes?: NodeData[]
+}>()
+const appStore = useAppStore()
+const nodesStore = useNodesStore()
+
+const displayNodes = computed(() => props.nodes ?? nodesStore.nodes)
+
+const containerRef = ref<HTMLDivElement>()
+const canvasRef = ref<HTMLCanvasElement>()
+const { width: containerWidth, height: containerHeight } = useElementSize(containerRef)
+
+const documentVisibility = useDocumentVisibility()
+const elementVisible = useElementVisibility(containerRef)
 const active = ref(true)
-const failed = ref(false)
-const paused = ref(false)
-const rotating = computed(() => !paused.value && !app.stopEarth && perfTier.value !== 'low')
-const regions = computed(() => {
-  const groups = new Map<string, { code: string, name: string, total: number, online: number, coord: [number, number] }>()
-  for (const node of props.nodes) {
-    const code = getCountryCodeFromRegion(node.region)
-    const coord = getCoordByCode(code)
-    if (!code || !coord)
-      continue
-    const region = groups.get(code) ?? { code, coord, name: getRegionDisplayName(node.region), total: 0, online: 0 }
-    region.total++
-    region.online += Number(node.online)
-    groups.set(code, region)
-  }
-  return [...groups.values()].sort((a, b) => b.online - a.online || b.total - a.total)
-})
-const online = computed(() => props.nodes.filter(node => node.online).length)
-const colors = computed(() => app.isDark
-  ? { dark: 1, baseColor: [0.12, 0.16, 0.3], glowColor: [0.05, 0.08, 0.2], markerColor: [0.4, 0.75, 1], arcColor: [0.4, 0.7, 1], mapBrightness: 8 }
-  : { dark: 0, baseColor: [0.97, 0.97, 1], glowColor: [0.9, 0.93, 1], markerColor: [0.18, 0.45, 0.9], arcColor: [0.18, 0.45, 0.9], mapBrightness: 7 })
-const markers = computed(() => regions.value.map(region => ({
-  location: region.coord,
-  size: 0.05,
-  color: (region.online ? colors.value.markerColor : [0.55, 0.60, 0.70]) as [number, number, number],
-})))
+const motion = usePreferredReducedMotion()
+const rotationOverride = ref<boolean | null>(null)
+const shouldRender = computed(() => active.value && documentVisibility.value === 'visible' && elementVisible.value)
+// Performance history may reduce resolution/FPS, never silently disable motion.
+// An explicit play action can override the OS/site motion preference for this visit.
+const shouldAutoRotate = computed(() => rotationOverride.value ?? (!appStore.stopEarth && motion.value !== 'reduce'))
 
-// Region arcs retain the original globe's visual signature. They illustrate
-// geographic distribution, not measured network connections.
-const arcs = computed<Arc[]>(() => {
-  const [hub, ...others] = [...regions.value].sort((a, b) => b.total - a.total || a.code.localeCompare(b.code))
-  return hub ? others.map(region => ({ from: hub.coord, to: region.coord })) : []
-})
-
-const initialPhi = -Math.PI / 2 - 105 * Math.PI / 180
-let phi = initialPhi
-let theta = 0.20
+let globe: Globe | null = null
+const INITIAL_THETA = 0.22
+const MIN_THETA = -0.65
+const MAX_THETA = 0.65
+const CHINA_COORD = getCoordByCode('CN') ?? [35.8617, 104.1954]
+const DEFAULT_PHI = normalizePhi(-Math.PI / 2 - CHINA_COORD[1] * Math.PI / 180)
+let phi = DEFAULT_PHI
 let targetPhi = phi
-let targetTheta = theta
-let dragging = false
-let previousX = 0
-let previousY = 0
-let globe: Globe | undefined
-let dirty = true
-let paletteDirty = true
-function palette(): Partial<COBEOptions> {
-  return { ...colors.value, baseColor: colors.value.baseColor as [number, number, number], glowColor: colors.value.glowColor as [number, number, number], markerColor: colors.value.markerColor as [number, number, number], arcColor: colors.value.arcColor as [number, number, number] }
+let theta = INITIAL_THETA
+let targetTheta = INITIAL_THETA
+let isPointerDown = false
+let lastPointerX = 0
+let lastPointerY = 0
+let staticRedrawUntil = 0
+// Inertia: velocity accumulated during drag, decays after release
+let velocityPhi = 0
+let velocityTheta = 0
+const INERTIA_DECAY = 0.92
+const INERTIA_MIN = 0.0001
+
+function normalizePhi(value: number): number {
+  const circle = Math.PI * 2
+  let next = value % circle
+  if (next <= -Math.PI)
+    next += circle
+  if (next > Math.PI)
+    next -= circle
+  return next
 }
-function draw() {
-  if (!globe)
-    return
-  globe.update({ ...(paletteDirty ? { ...palette(), markers: markers.value, arcs: arcs.value } : {}), phi, theta, width: width.value || 320, height: height.value || 320 })
-  paletteDirty = false
-  dirty = false
+
+function clampTheta(value: number): number {
+  return Math.min(Math.max(value, MIN_THETA), MAX_THETA)
 }
-const { pause, resume } = useRafFn(({ delta }) => {
-  if (!globe)
+
+function resetStoppedView() {
+  phi = DEFAULT_PHI
+  targetPhi = DEFAULT_PHI
+  theta = INITIAL_THETA
+  targetTheta = INITIAL_THETA
+}
+
+function triggerStaticRedrawWindow(duration = 1500) {
+  if (typeof performance === 'undefined') {
+    staticRedrawUntil = Date.now() + duration
     return
-  if (rotating.value && !dragging)
-    targetPhi += Math.min(delta, 64) * 0.000045
-  const changed = Math.abs(phi - targetPhi) + Math.abs(theta - targetTheta) > 0.00001
-  if (!dirty && !changed)
-    return
-  phi += (targetPhi - phi) * 0.16
-  theta += (targetTheta - theta) * 0.16
-  draw()
-}, { immediate: false, fpsLimit: 30 })
-const visible = computed(() => active.value && inView.value && visibility.value === 'visible' && !failed.value)
-watch(visible, value => value ? resume() : pause())
-watch(rotating, (value) => {
-  if (!value) {
-    targetPhi = phi
-    targetTheta = theta
   }
+  staticRedrawUntil = performance.now() + duration
+}
+
+function shouldKeepStaticRedraw(): boolean {
+  const now = typeof performance === 'undefined' ? Date.now() : performance.now()
+  return now < staticRedrawUntil
+}
+
+const isSmallScreen = typeof window !== 'undefined' && window.innerWidth < 768
+
+// 移动端 30fps 足够（装饰性自转），自转步长/跟随系数按帧率补偿保持视觉速度一致
+const GLOBE_FPS_LIMIT = computed(() => isSmallScreen || perfTier.value !== 'high' ? 30 : 60)
+
+// 保留原版清晰度：按原生 DPR 渲染，桌面上限 2、移动端上限 1.5。
+// 之前强制最低 1.5 会让 DPR=1 的显示器每帧多画 2.25 倍像素（同上游 87cc17a）
+// 旧性能缓存只限制地球帧率，不压低采样率或冻结动画。
+function getCappedDpr(): number {
+  if (typeof window === 'undefined')
+    return 1
+  const cap = isSmallScreen ? 1.5 : 2
+  return Math.min(window.devicePixelRatio || 1, cap)
+}
+
+// 移动端降低 mapSamples 提升性能
+function getMapSamples(): number {
+  if (typeof window === 'undefined')
+    return 14000
+  return window.innerWidth < 768 ? 8000 : 14000
+}
+
+interface RegionCluster {
+  code: string
+  coord: [number, number]
+  servers: number
+  onlineServers: number
+}
+
+function clusterKey(c: RegionCluster) {
+  return `${c.code}:${c.servers}:${c.onlineServers}`
+}
+
+// 节点按地区聚合
+const regionClusters = computed<RegionCluster[]>(() => {
+  const map = new Map<string, RegionCluster>()
+  for (const node of displayNodes.value) {
+    const code = getCountryCodeFromRegion(node.region)
+    if (!code)
+      continue
+    const coord = getCoordByCode(code)
+    if (!coord)
+      continue
+
+    let entry = map.get(code)
+    if (!entry) {
+      entry = { code, coord, servers: 0, onlineServers: 0 }
+      map.set(code, entry)
+    }
+    entry.servers += 1
+    if (node.online)
+      entry.onlineServers += 1
+  }
+  return Array.from(map.values()).sort((a, b) => b.servers - a.servers)
 })
-watch([width, height], () => {
-  dirty = true
+
+interface RegionRate {
+  up: number
+  down: number
+}
+
+const regionRates = computed<Map<string, RegionRate>>(() => {
+  const map = new Map<string, RegionRate>()
+  for (const node of displayNodes.value) {
+    if (!node.online)
+      continue
+    const code = getCountryCodeFromRegion(node.region)
+    if (!code)
+      continue
+    let entry = map.get(code)
+    if (!entry) {
+      entry = { up: 0, down: 0 }
+      map.set(code, entry)
+    }
+    entry.up += node.net_out || 0
+    entry.down += node.net_in || 0
+  }
+  return map
 })
-watch([colors, () => regions.value.map(region => `${region.code}:${region.online}:${region.total}`).join('|')], () => {
-  paletteDirty = true
-  dirty = true
-})
-function start() {
-  if (!canvas.value)
+
+function markerId(code: string): string {
+  return `cdn-${code.toLowerCase()}`
+}
+
+// 挂载 marker
+const anchorRefs = shallowRef<ReadonlyMap<string, HTMLDivElement>>(new Map())
+
+function getAnchorEl(code: string): HTMLDivElement | undefined {
+  return anchorRefs.value.get(markerId(code))
+}
+
+// 容器尺寸缓存
+let cachedContainerW = 0
+let cachedContainerH = 0
+function refreshContainerSizeCache() {
+  cachedContainerW = containerWidth.value || canvasRef.value?.clientWidth || 320
+  cachedContainerH = containerHeight.value || canvasRef.value?.clientHeight || cachedContainerW
+}
+
+const patchedAnchors = new WeakSet<HTMLElement>()
+
+interface AnchorCtx {
+  xPx: number
+  yPx: number
+}
+const anchorCtxs = new WeakMap<HTMLDivElement, AnchorCtx>()
+const dirtyAnchors = new Set<HTMLDivElement>()
+
+// 批量 flush 锚点位置
+function flushDirtyAnchors() {
+  if (dirtyAnchors.size === 0)
     return
+  for (const el of dirtyAnchors) {
+    const ctx = anchorCtxs.get(el)
+    if (ctx)
+      el.style.transform = `translate3d(${ctx.xPx}px, ${ctx.yPx}px, 0)`
+  }
+  dirtyAnchors.clear()
+}
+
+// 锚点定位改为性能更优、支持 GPU 加速的 transform
+// 异常回落到 cobe 默认行为
+function patchAnchorTransform(el: HTMLDivElement) {
+  if (patchedAnchors.has(el))
+    return
+  refreshContainerSizeCache()
+  const ctx: AnchorCtx = {
+    xPx: ((Number.parseFloat(el.style.left) || 0) / 100) * cachedContainerW,
+    yPx: ((Number.parseFloat(el.style.top) || 0) / 100) * cachedContainerH,
+  }
+  anchorCtxs.set(el, ctx)
+  el.style.left = '0px'
+  el.style.top = '0px'
+  el.style.transform = `translate3d(${ctx.xPx}px, ${ctx.yPx}px, 0)`
+  el.style.willChange = 'transform'
   try {
-    globe?.destroy()
-    globe = createGlobe(canvas.value, {
-      width: width.value || 320,
-      height: height.value || 320,
-      devicePixelRatio: Math.min(window.devicePixelRatio || 1, perfTier.value === 'low' ? 1 : 1.5),
-      phi,
-      theta,
-      diffuse: 1.6,
-      mapSamples: window.innerWidth < 768 ? 8000 : 14000,
-      mapBrightness: colors.value.mapBrightness,
-      dark: colors.value.dark,
-      baseColor: colors.value.baseColor as [number, number, number],
-      markerColor: colors.value.markerColor as [number, number, number],
-      glowColor: colors.value.glowColor as [number, number, number],
-      markers: markers.value,
-      arcs: arcs.value,
-      arcColor: colors.value.arcColor as [number, number, number],
-      arcWidth: 1,
-      arcHeight: 0.4,
-      markerElevation: 0,
-      scale: 1,
-      opacity: 1,
+    Object.defineProperty(el.style, 'left', {
+      configurable: true,
+      enumerable: true,
+      get() { return '0px' },
+      set(v: string) {
+        const next = ((Number.parseFloat(v) || 0) / 100) * cachedContainerW
+        if (next === ctx.xPx)
+          return
+        ctx.xPx = next
+        dirtyAnchors.add(el)
+      },
     })
-    failed.value = false
-    dirty = true
-    draw()
-    if (visible.value)
-      resume()
+    Object.defineProperty(el.style, 'top', {
+      configurable: true,
+      enumerable: true,
+      get() { return '0px' },
+      set(v: string) {
+        const next = ((Number.parseFloat(v) || 0) / 100) * cachedContainerH
+        if (next === ctx.yPx)
+          return
+        ctx.yPx = next
+        dirtyAnchors.add(el)
+      },
+    })
+    patchedAnchors.add(el)
   }
-  catch {
-    failed.value = true
-    pause()
+  catch (err) {
+    console.warn('[NodeEarthGlobe] anchor transform patch failed, falling back to cobe default', err)
   }
 }
-function pointerDown(event: PointerEvent) {
-  dragging = true
-  previousX = event.clientX
-  previousY = event.clientY
-  canvas.value?.setPointerCapture(event.pointerId)
-}
-function pointerMove(event: PointerEvent) {
-  if (!dragging)
+
+function patchAllAnchors() {
+  if (!canvasRef.value)
     return
-  targetPhi += (event.clientX - previousX) / 160
-  targetTheta = Math.max(-0.65, Math.min(0.65, targetTheta + (event.clientY - previousY) / 220))
-  previousX = event.clientX
-  previousY = event.clientY
+  const wrapper = canvasRef.value.parentElement
+  if (!wrapper)
+    return
+  const anchors = wrapper.querySelectorAll<HTMLDivElement>('div[style*="--cobe-"]')
+  anchors.forEach(patchAnchorTransform)
 }
-function pointerUp() {
-  dragging = false
-}
-function reset() {
-  targetPhi = initialPhi
-  targetTheta = 0.20
-  dirty = true
-}
-function keyRotate(event: KeyboardEvent) {
-  if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
-    event.preventDefault()
-    targetPhi += event.key === 'ArrowLeft' ? -0.25 : 0.25
+
+// hook wrapper.append：在 cobe 写入新锚点的第一个 left/top 之前完成 patch
+const COBE_HOOK_FLAG = Symbol('cobeAppendHooked')
+type HookableWrapper = HTMLElement & { [COBE_HOOK_FLAG]?: boolean }
+
+function hookWrapperAppend() {
+  if (!canvasRef.value)
+    return
+  const wrapper = canvasRef.value.parentElement as HookableWrapper | null
+  if (!wrapper || wrapper[COBE_HOOK_FLAG])
+    return
+  wrapper[COBE_HOOK_FLAG] = true
+  const origAppend = wrapper.append.bind(wrapper)
+  wrapper.append = (...nodes: (Node | string)[]) => {
+    const ret = origAppend(...nodes)
+    for (const node of nodes) {
+      if (node instanceof HTMLDivElement && node.style.cssText.includes('--cobe-'))
+        patchAnchorTransform(node)
+    }
+    return ret
   }
 }
-onMounted(() => {
-  start()
+
+function syncAnchorRefs() {
+  if (!canvasRef.value) {
+    anchorRefs.value = new Map()
+    return
+  }
+  const wrapper = canvasRef.value.parentElement
+  if (!wrapper) {
+    anchorRefs.value = new Map()
+    return
+  }
+  const next = new Map<string, HTMLDivElement>()
+  for (const cluster of regionClusters.value) {
+    const id = markerId(cluster.code)
+    const el = wrapper.querySelector<HTMLDivElement>(`div[style*="--cobe-${id}"]`)
+    if (el)
+      next.set(id, el)
+  }
+  anchorRefs.value = next
+}
+
+const markers = computed<Marker[]>(() => {
+  return regionClusters.value.map(cluster => ({
+    id: markerId(cluster.code),
+    location: cluster.coord,
+    size: 0.05, // 小圆点锚定旗帜牌的落点
+  }))
 })
+
+// 以服务器数最多的地区为中心，向其余地区连线，形成 CDN 拓扑
+const arcs = computed<Arc[]>(() => {
+  const clusters = regionClusters.value
+  if (clusters.length < 2)
+    return []
+  const hub = clusters[0]
+  if (!hub)
+    return []
+  return clusters.slice(1).map(cluster => ({
+    from: hub.coord,
+    to: cluster.coord,
+  }))
+})
+
+const themeColors = computed(() => {
+  if (appStore.isDark) {
+    return {
+      dark: 1,
+      mapBrightness: 8,
+      baseColor: [0.12, 0.16, 0.3] as [number, number, number],
+      markerColor: [0.4, 0.75, 1.0] as [number, number, number],
+      glowColor: [0.05, 0.08, 0.2] as [number, number, number],
+      arcColor: [0.4, 0.7, 1.0] as [number, number, number],
+    }
+  }
+  return {
+    dark: 0,
+    mapBrightness: 7,
+    baseColor: [0.97, 0.97, 1] as [number, number, number],
+    markerColor: [0.18, 0.45, 0.9] as [number, number, number],
+    glowColor: [0.9, 0.93, 1] as [number, number, number],
+    arcColor: [0.18, 0.45, 0.9] as [number, number, number],
+  }
+})
+
+function getRenderSize() {
+  const width = containerWidth.value || canvasRef.value?.clientWidth || 320
+  const height = containerHeight.value || canvasRef.value?.clientHeight || width
+  return { width, height }
+}
+
+function buildInitialOptions(): COBEOptions {
+  const colors = themeColors.value
+  const { width, height } = getRenderSize()
+  return {
+    devicePixelRatio: getCappedDpr(),
+    width,
+    height,
+    phi,
+    theta,
+    dark: colors.dark,
+    diffuse: 1.6,
+    mapSamples: getMapSamples(),
+    mapBrightness: colors.mapBrightness,
+    baseColor: colors.baseColor,
+    markerColor: colors.markerColor,
+    glowColor: colors.glowColor,
+    markers: markers.value,
+    arcs: arcs.value,
+    arcColor: colors.arcColor,
+    arcWidth: 1,
+    arcHeight: 0.4,
+    markerElevation: 0,
+  }
+}
+
+function updateGlobeFrame(forceSyncAnchors = false) {
+  if (!globe)
+    return
+  refreshContainerSizeCache()
+  const { width, height } = getRenderSize()
+  globe.update({ phi, theta, width, height })
+  if (forceSyncAnchors)
+    syncAnchorRefs()
+  flushDirtyAnchors()
+}
+
+// phi 收敛/静止时整帧跳过 globe.update，WebGL + 锚点写入双双归零
+const ORIENTATION_IDLE_EPSILON = 1e-5
+const { pause: pauseRaf, resume: resumeRaf } = useRafFn(
+  ({ delta }) => {
+    if (!globe || !shouldRender.value)
+      return
+    const frames = Math.min(delta, 64) / (1000 / 60)
+    const orientationLerp = 1 - 0.88 ** frames
+    const prevPhi = phi
+    const prevTheta = theta
+
+    if (!isPointerDown && shouldAutoRotate.value)
+      targetPhi += 0.003 * frames
+
+    // Apply inertia when not dragging and not auto-rotating
+    if (!isPointerDown && !shouldAutoRotate.value) {
+      if (Math.abs(velocityPhi) > INERTIA_MIN || Math.abs(velocityTheta) > INERTIA_MIN) {
+        targetPhi += velocityPhi * frames
+        targetTheta = clampTheta(targetTheta + velocityTheta * frames)
+        velocityPhi *= INERTIA_DECAY ** frames
+        velocityTheta *= INERTIA_DECAY ** frames
+      }
+    }
+
+    // Smooth lerp for fluid motion
+    phi += (targetPhi - phi) * orientationLerp
+    theta += (targetTheta - theta) * orientationLerp
+    if (
+      Math.abs(phi - prevPhi) < ORIENTATION_IDLE_EPSILON
+      && Math.abs(theta - prevTheta) < ORIENTATION_IDLE_EPSILON
+    ) {
+      if (!shouldAutoRotate.value && shouldKeepStaticRedraw()) {
+        updateGlobeFrame(true)
+      }
+      return
+    }
+    updateGlobeFrame()
+  },
+  { immediate: false, fpsLimit: GLOBE_FPS_LIMIT },
+)
+
+function startGlobe() {
+  if (!canvasRef.value)
+    return
+  if (appStore.stopEarth) {
+    resetStoppedView()
+    triggerStaticRedrawWindow()
+  }
+  globe = createGlobe(canvasRef.value, buildInitialOptions())
+  refreshContainerSizeCache()
+  hookWrapperAppend()
+  patchAllAnchors()
+  syncAnchorRefs()
+  // 静止地球没有自转帧，首帧需要在实际尺寸稳定后主动重绘一次。
+  requestAnimationFrame(() => {
+    updateGlobeFrame(true)
+  })
+  // documentVisibility 同步可读；useElementVisibility 需等 IntersectionObserver 首回调
+  // 先按"前台"启动，若实际不可见，shouldRender 的 watch 会在下一帧 pause
+  if (documentVisibility.value === 'visible')
+    resumeRaf()
+}
+
+onMounted(() => {
+  startGlobe()
+})
+
 onActivated(() => {
   active.value = true
 })
 onDeactivated(() => {
   active.value = false
-  pause()
+  pauseRaf()
 })
 onBeforeUnmount(() => {
-  pause()
+  pauseRaf()
   globe?.destroy()
+  globe = null
 })
+
+// 切换主题时更新颜色，不再整体重建（重建会导致地球丢失）
+watch(() => appStore.isDark, () => {
+  if (!globe)
+    return
+  const colors = themeColors.value
+  globe.update({
+    dark: colors.dark,
+    mapBrightness: colors.mapBrightness,
+    baseColor: colors.baseColor,
+    markerColor: colors.markerColor,
+    glowColor: colors.glowColor,
+    arcColor: colors.arcColor,
+  })
+  // 静止模式下需手动触发重绘
+  if (!shouldAutoRotate.value) {
+    triggerStaticRedrawWindow()
+  }
+})
+
+watch(
+  [containerWidth, containerHeight],
+  ([width, height]) => {
+    if (!globe || width <= 0 || height <= 0)
+      return
+    if (!shouldAutoRotate.value)
+      triggerStaticRedrawWindow(600)
+    updateGlobeFrame(true)
+  },
+)
+
+watch(
+  () => appStore.stopEarth,
+  (stopped) => {
+    rotationOverride.value = null
+    if (stopped)
+      resetStoppedView()
+    triggerStaticRedrawWindow()
+    updateGlobeFrame(true)
+  },
+)
+
+// 仅地区集合或在线状态变化时才推送 markers/arcs；速率推送不触发
+watch(
+  () => regionClusters.value.map(clusterKey).join(','),
+  () => {
+    if (!globe)
+      return
+    refreshContainerSizeCache()
+    globe.update({ markers: markers.value, arcs: arcs.value })
+    syncAnchorRefs()
+    if (!shouldAutoRotate.value)
+      triggerStaticRedrawWindow(600)
+    // phi 静止时 RAF 跳帧会漏掉这次 flush，手动补一次
+    flushDirtyAnchors()
+  },
+)
+
+watch(shouldRender, (visible) => {
+  if (!globe)
+    return
+  if (visible) {
+    if (!shouldAutoRotate.value)
+      triggerStaticRedrawWindow()
+    resumeRaf()
+  }
+  else {
+    pauseRaf()
+  }
+})
+
+watch(motion, () => {
+  rotationOverride.value = null
+})
+watch(shouldAutoRotate, (rotating) => {
+  if (!rotating) {
+    velocityPhi = 0
+    velocityTheta = 0
+    targetPhi = phi
+    targetTheta = theta
+  }
+  triggerStaticRedrawWindow()
+})
+function toggleRotation() {
+  rotationOverride.value = !shouldAutoRotate.value
+}
+function resetView() {
+  velocityPhi = 0
+  velocityTheta = 0
+  resetStoppedView()
+  triggerStaticRedrawWindow()
+  updateGlobeFrame(true)
+}
+function rotateWithKeyboard(event: KeyboardEvent) {
+  if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+    event.preventDefault()
+    targetPhi += event.key === 'ArrowLeft' ? -0.25 : 0.25
+  }
+}
+
+function onPointerDown(e: PointerEvent) {
+  isPointerDown = true
+  lastPointerX = e.clientX
+  lastPointerY = e.clientY
+  velocityPhi = 0
+  velocityTheta = 0
+  const target = e.currentTarget as HTMLElement
+  target.setPointerCapture(e.pointerId)
+}
+function onPointerMove(e: PointerEvent) {
+  if (!isPointerDown)
+    return
+  const deltaX = e.clientX - lastPointerX
+  const deltaY = e.clientY - lastPointerY
+  lastPointerX = e.clientX
+  lastPointerY = e.clientY
+  const dphi = deltaX / 200
+  const dtheta = deltaY / 300
+  targetPhi += dphi
+  targetTheta = clampTheta(targetTheta + dtheta)
+  // Track velocity for inertia on release
+  velocityPhi = dphi * 0.6
+  velocityTheta = dtheta * 0.6
+}
+function onPointerUp(e: PointerEvent) {
+  isPointerDown = false
+  const target = e.currentTarget as HTMLElement
+  if (target.hasPointerCapture(e.pointerId))
+    target.releasePointerCapture(e.pointerId)
+}
+
+const totalServers = computed(() => displayNodes.value.length)
+const onlineServers = computed(() => displayNodes.value.filter(node => node.online).length)
+const offlineServers = computed(() => totalServers.value - onlineServers.value)
+
+function rateFor(code: string): RegionRate {
+  return regionRates.value.get(code) ?? { up: 0, down: 0 }
+}
+
+function formatRate(bytesPerSec: number): string {
+  const { value, unit } = formatBytesPerSecondSplit(bytesPerSec, appStore.byteDecimals)
+  return `${value} ${unit}`
+}
 </script>
 
 <template>
-  <div class="network-globe relative isolate flex h-full min-h-64 flex-col">
-    <div class="absolute inset-x-0 top-0 z-10 flex items-start justify-between px-3 pt-2">
-      <div>
-        <div class="flex items-center gap-2 rounded-full bg-card/80 px-2.5 py-1 text-xs font-medium">
-          <Icon icon="tabler:world" width="16" class="text-blue-600 dark:text-sky-300" />全球节点
+  <div ref="containerRef" class="relative aspect-square w-full max-w-md mx-auto">
+    <div class="earth-globe-halo absolute inset-0 pointer-events-none" aria-hidden="true" />
+    <canvas
+      ref="canvasRef"
+      tabindex="0" role="img" aria-label="全球节点分布地球，可拖动或使用左右方向键旋转"
+      class="earth-globe-canvas absolute inset-0 w-full h-full select-none touch-none cursor-grab active:cursor-grabbing focus-visible:outline-2 focus-visible:outline-primary"
+      @keydown="rotateWithKeyboard"
+      @pointerdown="onPointerDown" @pointermove="onPointerMove" @pointerup="onPointerUp" @pointercancel="onPointerUp"
+    />
+
+    <template v-for="cluster in regionClusters" :key="cluster.code">
+      <Teleport :to="getAnchorEl(cluster.code) ?? containerRef!" :disabled="!getAnchorEl(cluster.code)">
+        <div
+          data-globe-label :data-region="cluster.code"
+          class="pointer-events-none absolute -top-7.5 left-0 transition-[opacity,filter] duration-500 rounded-lg backdrop-blur-xl backdrop-saturate-150"
+          :style="{
+            opacity: `var(--cobe-visible-${markerId(cluster.code)}, 0)`,
+            filter: `blur(calc((1 - var(--cobe-visible-${markerId(cluster.code)}, 0)) * 20px))`,
+          }"
+        >
+          <img
+            :src="`/images/flags/${cluster.code}.svg`" :alt="cluster.code"
+            class="size-4 block absolute -bottom-2 -left-2 z-1"
+          >
+          <div
+            class="relative z-2 glass-surface rounded-lg py-0.5 px-1.5 text-xs zoom-80 items-start justify-center text-nowrap ring-1 ring-foreground/[0.06] shadow-sm"
+          >
+            <div class="text-green-600 flex flex-row items-center gap-0.5">
+              <Icon icon="tabler:chevron-up" width="12" height="12" /> {{ formatRate(rateFor(cluster.code).up) }}
+            </div>
+            <div class="text-blue-600 flex flex-row items-center gap-0.5">
+              <Icon icon="tabler:chevron-down" width="12" height="12" /> {{ formatRate(rateFor(cluster.code).down) }}
+            </div>
+          </div>
         </div>
-        <div class="mt-1 pl-2.5 text-[11px] text-muted-foreground">
-          覆盖 {{ regions.length }} 个地区 · {{ online }} 台在线
-        </div>
-      </div>
-      <div v-if="!failed" class="flex items-center gap-1">
-        <button v-if="!app.stopEarth && perfTier !== 'low'" type="button" class="rounded-full border border-border bg-card/80 p-1.5 text-muted-foreground hover:bg-card focus-visible:outline-2" :aria-label="paused ? '继续地球旋转' : '暂停地球旋转'" @click="paused = !paused">
-          <Icon :icon="paused ? 'tabler:player-play' : 'tabler:player-pause'" width="13" />
-        </button>
-        <button type="button" aria-label="重置地球视角" class="rounded-full border border-border bg-card/80 p-1.5 text-muted-foreground hover:bg-card focus-visible:outline-2" @click="reset">
-          <Icon icon="tabler:rotate-clockwise" width="13" />
-        </button>
-      </div>
+      </Teleport>
+    </template>
+
+    <div class="absolute right-0 top-3 z-10 flex gap-1">
+      <button type="button" :aria-label="shouldAutoRotate ? '暂停地球旋转' : '继续地球旋转'" class="glass-surface rounded-full border border-border p-1.5 text-muted-foreground hover:text-primary focus-visible:outline-2" @click="toggleRotation">
+        <Icon :icon="shouldAutoRotate ? 'tabler:player-pause' : 'tabler:player-play'" width="14" />
+      </button>
+      <button type="button" aria-label="重置地球视角" class="glass-surface rounded-full border border-border p-1.5 text-muted-foreground hover:text-primary focus-visible:outline-2" @click="resetView">
+        <Icon icon="tabler:rotate-clockwise" width="14" />
+      </button>
     </div>
-    <div ref="container" class="globe-stage relative mx-auto -mb-4 aspect-square w-[min(100%,360px)] shrink-0">
-      <div class="globe-halo pointer-events-none absolute inset-0" aria-hidden="true" />
-      <canvas v-show="!failed" ref="canvas" tabindex="0" role="img" aria-label="全球节点分布地球，可拖动或使用左右方向键旋转" class="relative z-1 size-full cursor-grab touch-pan-y focus-visible:outline-2 focus-visible:outline-primary active:cursor-grabbing" @pointerdown="pointerDown" @pointermove="pointerMove" @pointerup="pointerUp" @pointercancel="pointerUp" @keydown="keyRotate" @webglcontextlost.prevent="failed = true; pause()" @webglcontextrestored="start" />
-      <div v-if="failed" class="absolute inset-[18%] flex items-center justify-center rounded-full border border-primary/20 bg-primary/5 text-primary">
-        <Icon icon="tabler:world" width="100" />
+    <div
+      v-if="totalServers > 0"
+      class="absolute top-6 md:top-12 left-0 text-[10px] text-muted-foreground pointer-events-none flex gap-2 items-center backdrop-blur-xl backdrop-saturate-150 bg-background/40 rounded-lg px-2.5 py-1 ring-1 ring-foreground/[0.06] shadow-sm"
+    >
+      <div v-if="onlineServers > 0" class="flex items-center gap-1">
+        <span class="inline-block size-1.5 rounded-full bg-green-600 animate-pulse" />
+        <span class="text-green-600">{{ onlineServers }}</span>
       </div>
-    </div>
-    <div class="relative z-10 mx-auto mt-auto flex max-w-full flex-wrap justify-center gap-x-3 gap-y-1.5 rounded-full bg-card/80 px-3 py-1.5 text-[10px] text-muted-foreground">
-      <span v-for="region in regions.slice(0, 5)" :key="region.code" class="flex items-center gap-1" :title="`${region.name}：${region.online} / ${region.total} 在线`"><img :src="`/images/flags/${region.code}.svg`" alt="" class="size-3">{{ region.name }}<span class="font-medium text-foreground">{{ region.online }}</span></span>
+      <div v-if="offlineServers > 0" class="flex items-center gap-1">
+        <span class="inline-block size-1.5 rounded-full bg-yellow-600 animate-pulse" />
+        <span class="text-yellow-600">{{ offlineServers }}</span>
+      </div>
     </div>
   </div>
 </template>
 
 <style scoped>
-.globe-stage canvas {
+.earth-globe-canvas {
   contain: layout paint;
 }
-.globe-halo {
+
+/* 大气层光晕：静态渐变代替 canvas 上的 drop-shadow 滤镜，
+   视觉上是球体外沿的一圈辉光，且不再随每帧重绘重算滤镜。
+   色调沿用原 drop-shadow 的蓝色系 */
+.earth-globe-halo {
   background: radial-gradient(
     circle at 50% 50%,
-    oklch(0.6 0.15 250 / 0.16) 0%,
-    oklch(0.6 0.15 250 / 0.06) 38%,
-    oklch(0.6 0.15 250 / 0.12) 47%,
+    oklch(0.6 0.15 250 / 0.2) 0%,
+    oklch(0.6 0.15 250 / 0.08) 38%,
+    oklch(0.6 0.15 250 / 0.14) 47%,
     transparent 60%
   );
 }
-:global(.dark) .globe-halo {
+
+:global(.dark) .earth-globe-halo {
   background: radial-gradient(
     circle at 50% 50%,
-    oklch(0.5 0.18 250 / 0.22) 0%,
-    oklch(0.5 0.18 250 / 0.08) 38%,
-    oklch(0.5 0.18 250 / 0.16) 47%,
+    oklch(0.5 0.18 250 / 0.3) 0%,
+    oklch(0.5 0.18 250 / 0.12) 38%,
+    oklch(0.5 0.18 250 / 0.22) 47%,
     transparent 62%
   );
 }

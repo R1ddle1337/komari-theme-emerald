@@ -729,7 +729,7 @@ onBeforeUnmount(() => {
     <!-- 时间选择器 -->
     <Tabs v-model="selectedView" class="w-full items-center">
       <div class="min-w-0 flex-1 overflow-x-auto rounded-sm pointer-events-auto">
-        <TabsList class="w-max h-8 bg-card rounded-lg border border-border shadow-sm">
+        <TabsList class="w-max h-8 glass-surface rounded-lg border border-border shadow-sm">
           <TabsTrigger
             v-for="view in availableViews" :key="view.label" :value="view.label"
             class="h-6.5 flex-none shrink-0 text-xs border-none data-[state=active]:text-green-600 shadow-none rounded-sm"
@@ -741,14 +741,14 @@ onBeforeUnmount(() => {
       <div class="md:flex-1" />
       <div class="flex gap-2 items-center">
         <Button
-          variant="ghost" size="xs" class="h-7 rounded-lg bg-card hover:bg-accent border border-border"
+          variant="ghost" size="xs" class="h-7 rounded-lg glass-surface hover:bg-accent border border-border"
           :class="selectedTaskIds.length === tasks.length ? 'shadow-[0_0_0_2px] shadow-green-600/10 text-green-600' : ''"
           @click="showAllTasks"
         >
           全选
         </Button>
         <Button
-          variant="ghost" size="xs" class="h-7 rounded-lg bg-card hover:bg-accent border border-border"
+          variant="ghost" size="xs" class="h-7 rounded-lg glass-surface hover:bg-accent border border-border"
           :class="!selectedTaskIds.length && 'shadow-[0_0_0_2px] shadow-green-600/10 text-green-600'"
           @click="hideAllTasks"
         >
@@ -777,7 +777,7 @@ onBeforeUnmount(() => {
         >
           <div
             v-for="task in latestValues" :key="task.id"
-            class="p-2 rounded-lg bg-card hover:bg-accent hover:shadow-[0_0_0_2px] hover:shadow-primary/10 flex gap-3 cursor-pointer select-none transition-all items-center border border-border"
+            class="p-2 rounded-lg glass-surface hover:bg-accent hover:shadow-[0_0_0_2px] hover:shadow-primary/10 flex gap-3 cursor-pointer select-none transition-all items-center border border-border"
             :class="[!selectedTaskIds.includes(task.id) && 'opacity-30']"
             :onmouseover="(e: MouseEvent) => ((e.currentTarget as HTMLElement).style.borderColor = task.color)"
             :onmouseout="(e: MouseEvent) => ((e.currentTarget as HTMLElement).style.borderColor = '')"
@@ -865,19 +865,19 @@ onBeforeUnmount(() => {
           <TooltipProvider>
             <div class="flex gap-2 items-center">
               <Button
-                variant="ghost" size="xs" class="h-7 rounded-lg bg-card hover:bg-accent border border-border"
+                variant="ghost" size="xs" class="h-7 rounded-lg glass-surface hover:bg-accent border border-border"
                 :class="showDelay && 'shadow-[0_0_0_2px] shadow-green-600/10 text-green-600'" @click="showDelay = !showDelay"
               >
                 延迟
               </Button>
               <Button
-                variant="ghost" size="xs" class="h-7 rounded-lg bg-card hover:bg-accent border border-border"
+                variant="ghost" size="xs" class="h-7 rounded-lg glass-surface hover:bg-accent border border-border"
                 :class="showLoss && 'shadow-[0_0_0_2px] shadow-green-600/10 text-green-600'" @click="showLoss = !showLoss"
               >
                 丢包
               </Button>
               <Button
-                variant="ghost" size="xs" class="h-7 rounded-lg bg-card hover:bg-accent border border-border"
+                variant="ghost" size="xs" class="h-7 rounded-lg glass-surface hover:bg-accent border border-border"
                 :class="cutPeak && 'shadow-[0_0_0_2px] shadow-green-600/10 text-green-600'" @click="cutPeak = !cutPeak"
               >
                 平滑峰值
@@ -900,7 +900,7 @@ onBeforeUnmount(() => {
         </div>
 
         <!-- 图表 -->
-        <div class="h-80 bg-card p-4 rounded-lg border border-border shadow-sm">
+        <div class="h-80 glass-surface p-4 rounded-lg border border-border shadow-sm">
           <VChart :option="pingChartOption" autoresize />
         </div>
       </template>

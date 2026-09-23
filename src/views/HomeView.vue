@@ -220,7 +220,7 @@ function getNodeItemTransitionStyle(index: number): Record<string, string> {
     <div class="node-info px-4 flex flex-col gap-4">
       <div class="nodes">
         <Tabs v-model="appStore.nodeSelectedGroup" class="w-full flex-col gap-4">
-          <div class="filter-panel rounded-2xl border border-white/70 dark:border-white/10 bg-card/90 p-3 sm:p-4">
+          <div class="filter-panel rounded-2xl border border-white/70 dark:border-white/10 glass-surface p-3 sm:p-4">
             <div class="flex flex-wrap items-center gap-3">
               <div class="relative min-w-0 flex-1 basis-48">
                 <Input v-model="appStore.nodeSearchText" aria-label="搜索节点" placeholder="搜索名称、地区、系统或标签" class="h-9 bg-background pl-9 pr-8 text-sm shadow-none" />

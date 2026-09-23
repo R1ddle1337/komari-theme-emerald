@@ -1,6 +1,6 @@
 import { ref } from 'vue'
 
-/** 按设备性能和减少动态效果偏好控制地球分辨率及自动旋转。用于地球和 Shader 背景。 */
+/** Shader 背景的自适应画质；地球仅用该等级限制帧率，不以低档禁用旋转。 */
 export type PerfTier = 'high' | 'medium' | 'low'
 
 const STORAGE_KEY = 'emerald-perf-tier-v1'

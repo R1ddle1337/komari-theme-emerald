@@ -193,7 +193,7 @@ const summaryMetrics = computed(() => {
         <template v-for="metric in summaryMetrics" :key="metric.key">
           <PopoverRoot v-if="metric.key === 'finance'">
             <PopoverTrigger as-child>
-              <button type="button" aria-label="查看费用和汇率" class="summary-tile flex flex-col justify-start rounded-2xl border border-white/70 dark:border-white/10 bg-card/90 p-3 sm:p-4 text-left transition-colors hover:border-primary/40 focus-visible:outline-2 focus-visible:outline-primary">
+              <button type="button" aria-label="查看费用和汇率" class="summary-tile flex flex-col justify-start rounded-2xl border border-white/70 dark:border-white/10 glass-surface p-3 sm:p-4 text-left transition-colors hover:border-primary/40 focus-visible:outline-2 focus-visible:outline-primary">
                 <span class="mb-2 sm:mb-4 flex items-center justify-between text-xs text-muted-foreground">{{ metric.label }}<span class="rounded-lg bg-primary/10 p-1.5 text-primary"><Icon :icon="metric.icon" width="16" /></span></span>
                 <span class="block truncate text-base sm:text-2xl font-semibold tracking-tight">{{ metric.value }}</span>
                 <span class="mt-1 hidden sm:block text-[11px] text-muted-foreground">{{ metric.detail }} · 查看明细</span>
@@ -235,7 +235,7 @@ const summaryMetrics = computed(() => {
               </PopoverContent>
             </PopoverPortal>
           </PopoverRoot>
-          <div v-else class="min-w-0 summary-tile rounded-2xl border border-white/70 dark:border-white/10 bg-card/90 p-3 sm:p-4" :title="metric.hint" :data-metric="metric.key">
+          <div v-else class="min-w-0 summary-tile rounded-2xl border border-white/70 dark:border-white/10 glass-surface p-3 sm:p-4" :title="metric.hint" :data-metric="metric.key">
             <div class="mb-2 sm:mb-4 flex items-center justify-between gap-2 text-xs text-muted-foreground">
               {{ metric.label }}<span class="rounded-lg bg-primary/10 p-1.5 text-primary"><Icon :icon="metric.icon" width="16" /></span>
             </div>

@@ -237,6 +237,21 @@ const useAppStore = defineStore('app', () => {
     return false
   })
 
+  const enableGlassEffect = computed<boolean>(() => {
+    const settings = publicSettings.value?.theme_settings
+    if (!settings || settings.enableGlassEffect === undefined || settings.enableGlassEffect === null) {
+      return true
+    }
+    const val = settings.enableGlassEffect
+    if (typeof val === 'boolean')
+      return val
+    if (val === 'true' || val === '1')
+      return true
+    if (val === 'false' || val === '0')
+      return false
+    return true
+  })
+
   // 计算属性：ICP 备案配置
   const icpEnabled = computed<boolean>(() => {
     const settings = publicSettings.value?.theme_settings
@@ -427,6 +442,7 @@ const useAppStore = defineStore('app', () => {
     visitorInfoCardEnabled,
     hideAdminEntryWhenLoggedOut,
     disablePageAnimation,
+    enableGlassEffect,
     icpEnabled,
     icpNumber,
     icpUrl,

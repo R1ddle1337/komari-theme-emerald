@@ -14,6 +14,9 @@ import Provider from './components/Provider.vue'
 
 const appStore = useAppStore()
 const nodesStore = useNodesStore()
+watchEffect(() => {
+  document.documentElement.classList.toggle('no-glass', !appStore.enableGlassEffect)
+})
 
 // 节点掉线/恢复浏览器通知：首个非空快照只记录基线不通知
 const lastOnlineState = new Map<string, boolean>()

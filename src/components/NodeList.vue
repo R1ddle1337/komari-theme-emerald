@@ -184,7 +184,7 @@ function filterByTag(tag: string) {
   <div v-if="isDesktop" class="overflow-x-auto overflow-y-hidden min-w-0 p-1 -m-1">
     <div class="min-w-fit w-full flex flex-col gap-1">
       <!-- 表头 -->
-      <div class="grid p-2 bg-card rounded-lg border border-border shadow-sm gap-2" :style="gridStyle">
+      <div class="grid p-2 glass-surface rounded-lg border border-border shadow-sm gap-2" :style="gridStyle">
         <div
           v-for="col in columns" :key="col.key"
           :class="[col.sortable ? 'cursor-pointer' : '', ['status', 'os'].includes(col.key) ? 'text-center' : 'text-left']"
@@ -206,7 +206,7 @@ function filterByTag(tag: string) {
         <div
           v-for="(node, index) in sortedNodes"
           :key="getRowTransitionKey(node)"
-          class="group flex flex-col relative h-14 justify-center px-2 cursor-pointer bg-card rounded-lg border border-border hover:border-primary/40 hover:bg-accent transition-all"
+          class="group flex flex-col relative h-14 justify-center px-2 cursor-pointer glass-surface rounded-lg border border-border hover:border-primary/40 hover:bg-accent transition-all"
           :class="[!node.online && '!shadow-red-600/10']"
           :style="getRowTransitionStyle(index)"
           @click="handleClick(node)"
@@ -399,7 +399,7 @@ function filterByTag(tag: string) {
     <div class="sort-chips flex gap-1 overflow-x-auto">
       <button
         v-for="col in mobileSortOptions" :key="col.key" type="button"
-        class="shrink-0 h-6 px-2 rounded-md text-[11px] bg-card border border-border transition-colors"
+        class="shrink-0 h-6 px-2 rounded-md text-[11px] glass-surface border border-border transition-colors"
         :class="[sortKey === col.key ? 'text-green-600 bg-background/70' : 'text-muted-foreground']"
         @click="handleSort(col)"
       >
@@ -417,7 +417,7 @@ function filterByTag(tag: string) {
       <div
         v-for="(node, index) in sortedNodes"
         :key="getRowTransitionKey(node)"
-        class="relative p-2.5 cursor-pointer bg-card rounded-lg border border-border active:bg-accent transition-all"
+        class="relative p-2.5 cursor-pointer glass-surface rounded-lg border border-border active:bg-accent transition-all"
         :class="[!node.online && '!shadow-red-600/10']"
         :style="getRowTransitionStyle(index)"
         @click="handleClick(node)"
