@@ -193,7 +193,6 @@ const LOAD_METRIC_FIELDS: Record<string, keyof RecordFormat> = {
   'load.average': 'load',
   'memory.used': 'ram',
   'swap.used': 'swap',
-  'temperature': 'temp',
   'disk.used': 'disk',
   'net.in.rate': 'net_in',
   'net.out.rate': 'net_out',
