@@ -1,8 +1,6 @@
 <script setup lang="ts">
 import { useDocumentVisibility, usePreferredReducedMotion } from '@vueuse/core'
 import { computed, onUnmounted, ref, watch } from 'vue'
-import ShaderBackground from '@/components/ShaderBackground.vue'
-import ShaderBackgroundLiquid from '@/components/ShaderBackgroundLiquid.vue'
 import { useAppStore } from '@/stores/app'
 
 const appStore = useAppStore()
@@ -50,8 +48,6 @@ const showLoadedBackground = computed(() =>
 const showMediaBackground = computed(() =>
   hasCustomBackground.value && !hasError.value && (backgroundType.value === 'video' || showLoadedBackground.value),
 )
-
-const showDefaultBackground = computed(() => !hasCustomBackground.value)
 
 const showLoadingBackground = computed(() =>
   hasCustomBackground.value && !isLoaded.value && !hasError.value,
@@ -134,18 +130,6 @@ onUnmounted(() => {
 
 <template>
   <div class="background-container" :style="backgroundContainerStyle">
-    <Transition name="fade" mode="out-in">
-      <div
-        v-if="showDefaultBackground"
-        :key="appStore.shaderType"
-        class="absolute inset-0 overflow-hidden"
-      >
-        <ShaderBackgroundLiquid v-if="appStore.shaderType === 'liquid'" />
-        <ShaderBackground v-else-if="appStore.shaderType === 'bubbles'" />
-        <!-- Readability overlay: softens shader intensity so card text stays legible -->
-        <div class="absolute inset-0 pointer-events-none bg-white/25 dark:bg-black/20" />
-      </div>
-    </Transition>
     <Transition name="fade">
       <div v-if="showLoadingBackground" class="background-loading" />
     </Transition>

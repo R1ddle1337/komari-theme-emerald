@@ -53,19 +53,19 @@ function tone(reading: CarrierReading) {
       <button
         type="button" data-carrier-latency :data-node="uuid"
         :aria-label="`查看${ping.selectedRegion || ''}三网延迟和各地对比`"
-        class="w-full min-w-0 rounded-md bg-slate-500/5 text-left hover:bg-slate-500/10 focus-visible:outline-2 focus-visible:outline-emerald-500"
-        :class="compact ? 'px-1 py-1' : 'p-2'"
+        class="w-full min-w-0 rounded-lg border border-border bg-muted/50 text-left hover:bg-accent focus-visible:outline-2 focus-visible:outline-emerald-500"
+        :class="compact ? 'px-1 py-1' : 'p-2.5'"
         @click.stop @keydown.stop
       >
-        <span v-if="!compact" class="mb-1.5 flex items-center justify-between gap-1 text-[10px] text-muted-foreground">
+        <span v-if="!compact" class="mb-1.5 flex items-center justify-between gap-1 text-[11px] text-muted-foreground">
           <span>{{ ping.selectedRegion || '测点' }}三网</span>
           <span class="inline-flex items-center gap-0.5">近 5 分钟 <Icon icon="tabler:chevron-down" width="12" /></span>
         </span>
         <span class="grid grid-cols-3 gap-1">
           <span v-for="carrier in selected" :key="carrier.id" class="flex min-w-0 flex-col gap-0.5" :data-carrier="carrier.id">
-            <span class="text-[10px] text-muted-foreground">{{ carrier.name }}</span>
-            <span class="whitespace-nowrap font-medium tabular-nums" :class="[compact ? 'text-[10px]' : 'text-xs', tone(carrier)]">{{ label(carrier) }}</span>
-            <span v-if="!compact" class="text-[9px] text-muted-foreground tabular-nums">{{ lossLabel(carrier) }}</span>
+            <span class="text-[11px] text-muted-foreground">{{ carrier.name }}</span>
+            <span class="whitespace-nowrap font-medium tabular-nums" :class="[compact ? 'text-[10px]' : 'text-sm', tone(carrier)]">{{ label(carrier) }}</span>
+            <span v-if="!compact" class="text-[11px] text-muted-foreground tabular-nums">{{ lossLabel(carrier) }}</span>
           </span>
         </span>
       </button>
@@ -73,7 +73,7 @@ function tone(reading: CarrierReading) {
     <PopoverPortal>
       <PopoverContent
         side="bottom" align="center" :side-offset="6" :collision-padding="12"
-        class="z-50 w-[min(23rem,calc(100vw-1.5rem))] rounded-xl border bg-background p-3 text-foreground shadow-xl outline-none"
+        class="z-50 w-[min(23rem,calc(100vw-1.5rem))] rounded-xl border bg-popover p-3 text-foreground shadow-xl outline-none"
         aria-label="各地三网延迟" @click.stop
       >
         <div class="mb-2 flex items-center justify-between gap-2">
@@ -105,7 +105,7 @@ function tone(reading: CarrierReading) {
                 <div :class="tone(reading)">
                   {{ label(reading) }}
                 </div>
-                <div class="mt-0.5 text-[9px] text-muted-foreground">
+                <div class="mt-0.5 text-[11px] text-muted-foreground">
                   {{ lossLabel(reading) }}
                 </div>
               </td>

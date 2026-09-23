@@ -30,7 +30,7 @@ const showFiling = computed(() => showIcp.value || showPolice.value)
 </script>
 
 <template>
-  <footer class="w-full sm:flex-row sm:gap-4 sm:items-center sm:justify-between max-w-[1280px] mx-auto p-4">
+  <footer class="w-full sm:flex-row sm:gap-4 sm:items-center sm:justify-between max-w-[1440px] mx-auto p-4 border-t border-border">
     <div class="flex flex-row text-xs text-muted-foreground">
       <div class="flex gap-1 items-center">
         Powered by

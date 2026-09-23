@@ -63,7 +63,7 @@ const banner = computed(() => {
   >
     <div v-if="banner" class="fixed top-3.5 inset-x-0 z-50 flex justify-center pointer-events-none">
       <div
-        class="pointer-events-auto flex items-center gap-1.5 min-h-7 px-3 py-1 max-w-[calc(100vw-2rem)] rounded-full text-xs backdrop-blur-xl shadow-sm ring-1"
+        class="pointer-events-auto flex items-center gap-1.5 min-h-7 px-3 py-1 max-w-[calc(100vw-2rem)] rounded-full text-xs shadow-sm ring-1"
         :class="banner.tone === 'error'
           ? 'bg-red-500/15 text-red-600 ring-red-500/20'
           : 'bg-amber-500/15 text-amber-600 ring-amber-500/20'"

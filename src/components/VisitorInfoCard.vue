@@ -404,10 +404,9 @@ function applyGeo(geo: VisitorGeoData | null, cache = true) {
 </script>
 
 <template>
-  <div class="fixed inset-x-0 bottom-2.5 z-30 flex justify-center">
+  <div class="px-4 pb-4 flex justify-center">
     <div
-      class="focus-visible:outline-2 focus-visible:outline-emerald-500 bg-background/30 p-1.5 px-3 shadow-[-1px_-1px_0_background,0_0_16px_rgba(0,0,0,0.05)] backdrop-blur-xl backdrop-saturate-150 ring-1 ring-foreground/[0.06] transition-[border-radius,transform,background-color,box-shadow] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]"
-      :class="[expand ? 'rounded-lg -translate-y-1 bg-background/38 shadow-[-1px_-1px_0_background,0_10px_28px_rgba(0,0,0,0.08)]' : 'rounded-xl']"
+      class="max-w-full cursor-pointer rounded-lg border border-border bg-card px-3 py-2 focus-visible:outline-2 focus-visible:outline-primary"
       role="button" tabindex="0" aria-label="访客信息" :aria-expanded="expand"
       @keydown.enter.prevent="expand = !expand"
       @keydown.space.prevent="expand = !expand"

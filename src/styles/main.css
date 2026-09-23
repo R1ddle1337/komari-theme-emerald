@@ -9,31 +9,31 @@
 }
 
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.141 0.005 285.823);
+  --background: oklch(0.978 0.004 165);
+  --foreground: oklch(0.26 0.015 165);
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.141 0.005 285.823);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.141 0.005 285.823);
-  --primary: oklch(0.21 0.006 285.885);
+  --primary: oklch(0.48 0.11 165);
   --primary-foreground: oklch(0.985 0 0);
   --secondary: oklch(0.967 0.001 286.375);
   --secondary-foreground: oklch(0.21 0.006 285.885);
-  --muted: oklch(0.967 0.001 286.375);
-  --muted-foreground: oklch(0.552 0.016 285.938);
-  --accent: oklch(0.967 0.001 286.375);
+  --muted: oklch(0.96 0.006 165);
+  --muted-foreground: oklch(0.49 0.015 165);
+  --accent: oklch(0.95 0.012 165);
   --accent-foreground: oklch(0.21 0.006 285.885);
   --destructive: oklch(0.577 0.245 27.325);
   --destructive-foreground: oklch(0.985 0 0);
   --warning: oklch(0.768 0.155 70);
   --warning-foreground: oklch(0.21 0.006 285.885);
-  --success: oklch(0.696 0.17 162.48);
+  --success: oklch(0.56 0.12 165);
   --success-foreground: oklch(0.985 0 0);
   --info: oklch(0.6 0.118 230);
   --info-foreground: oklch(0.985 0 0);
-  --border: oklch(0.92 0.004 286.32);
-  --input: oklch(0.92 0.004 286.32);
-  --ring: oklch(0.705 0.015 286.067);
+  --border: oklch(0.9 0.009 165);
+  --input: oklch(0.86 0.01 165);
+  --ring: oklch(0.57 0.1 165);
   --chart-1: oklch(0.646 0.222 41.116);
   --chart-2: oklch(0.6 0.118 184.704);
   --chart-3: oklch(0.398 0.07 227.392);
@@ -44,19 +44,19 @@
 }
 
 .dark {
-  --background: oklch(0.141 0.005 285.823);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.21 0.006 285.885);
+  --background: oklch(0.18 0.011 165);
+  --foreground: oklch(0.94 0.006 165);
+  --card: oklch(0.23 0.012 165);
   --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.21 0.006 285.885);
+  --popover: oklch(0.25 0.012 165);
   --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.92 0.004 286.32);
-  --primary-foreground: oklch(0.21 0.006 285.885);
+  --primary: oklch(0.77 0.13 165);
+  --primary-foreground: oklch(0.18 0.015 165);
   --secondary: oklch(0.274 0.006 286.033);
   --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.274 0.006 286.033);
-  --muted-foreground: oklch(0.705 0.015 286.067);
-  --accent: oklch(0.274 0.006 286.033);
+  --muted: oklch(0.27 0.012 165);
+  --muted-foreground: oklch(0.71 0.015 165);
+  --accent: oklch(0.29 0.016 165);
   --accent-foreground: oklch(0.985 0 0);
   --destructive: oklch(0.704 0.191 22.216);
   --destructive-foreground: oklch(0.985 0 0);
@@ -66,9 +66,9 @@
   --success-foreground: oklch(0.141 0.005 285.823);
   --info: oklch(0.68 0.13 230);
   --info-foreground: oklch(0.141 0.005 285.823);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.552 0.016 285.938);
+  --border: oklch(0.34 0.013 165);
+  --input: oklch(0.39 0.013 165);
+  --ring: oklch(0.65 0.1 165);
   --chart-1: oklch(0.488 0.243 264.376);
   --chart-2: oklch(0.696 0.17 162.48);
   --chart-3: oklch(0.769 0.188 70.08);
@@ -127,6 +127,8 @@
     background-color: var(--color-background);
     color: var(--color-foreground);
     font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    font-variant-numeric: tabular-nums;
   }
 
   .dark body {
@@ -152,63 +154,5 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-  }
-}
-
-/* Disable glass effect globally when toggled off */
-html.no-glass *,
-html.no-glass *::before,
-html.no-glass *::after {
-  backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
-}
-
-html.no-glass body {
-  background-image: none !important;
-}
-
-/* 移动端毛玻璃降半径：动态背景本就柔和，24px 与 10px 视觉几乎无差，
-   但每帧 backdrop-filter 重算成本随半径大幅上升，手机 GPU 扛不住 */
-@media (max-width: 767px) {
-  html:not(.no-glass) .backdrop-blur-xl {
-    --tw-backdrop-blur: blur(10px);
-  }
-}
-
-/* 画质分级（html 根类由 utils/perfTier 维护，high 无类）：
-   medium 在任何宽度下降玻璃半径；low 走静态高级模式 */
-html.perf-medium:not(.no-glass) .backdrop-blur-xl,
-html.perf-low:not(.no-glass) .backdrop-blur-xl {
-  --tw-backdrop-blur: blur(10px);
-}
-
-/* low：进场过渡去 filter blur（背景已冻结，别再给 GPU 加戏） */
-html.perf-low .node-card-switch-enter-from,
-html.perf-low .node-card-switch-leave-to,
-html.perf-low .node-row-switch-enter-from,
-html.perf-low .node-row-switch-leave-to {
-  filter: none !important;
-}
-
-/* low：隐藏装饰性常驻动画——状态点波纹与大光斑漂浮层 */
-html.perf-low .animate-ping {
-  display: none;
-}
-
-html.perf-low .glass-orbs {
-  display: none;
-}
-
-/* Dynamic hover blur transition on glass cards */
-@layer utilities {
-  .glass-hover-blur {
-    transition:
-      backdrop-filter 0.3s ease,
-      -webkit-backdrop-filter 0.3s ease;
-  }
-
-  .glass-hover-blur:hover {
-    backdrop-filter: blur(32px) saturate(1.8);
-    -webkit-backdrop-filter: blur(32px) saturate(1.8);
   }
 }

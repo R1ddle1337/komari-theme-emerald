@@ -3,9 +3,7 @@ import type { NodeData } from '@/stores/nodes'
 import { Icon } from '@iconify/vue'
 import { computed } from 'vue'
 import CarrierLatency from '@/components/CarrierLatency.vue'
-import { Badge } from '@/components/ui/badge'
 import { CardX } from '@/components/ui/card-x'
-import { DataTooltip } from '@/components/ui/data-tooltip'
 import { ProgressThin } from '@/components/ui/progress-thin'
 import { useAppStore } from '@/stores/app'
 import { formatBytesPerSecondWithConfig, formatBytesWithConfig, formatDateTime, formatRelativeTime, formatUptimeWithFormat, getStatus } from '@/utils/helper'
@@ -30,10 +28,6 @@ const memPercentage = computed(() => (props.node.ram ?? 0) / (props.node.mem_tot
 const memStatus = computed(() => getStatus(memPercentage.value))
 const diskPercentage = computed(() => (props.node.disk ?? 0) / (props.node.disk_total || 1) * 100)
 const diskStatus = computed(() => getStatus(diskPercentage.value))
-
-function showTrafficProgress(node: NodeData): boolean {
-  return node.traffic_limit > 0
-}
 
 const trafficUsed = computed(() => nodeTrafficUsed(props.node))
 const trafficUsedPercentage = computed(() => props.node.traffic_limit > 0
@@ -64,259 +58,95 @@ function filterByTag(tag: string) {
 function hasRegion(region: string | null | undefined): boolean {
   return Boolean(region?.trim())
 }
+const metrics = computed(() => [
+  { label: 'CPU', value: `${(props.node.cpu ?? 0).toFixed(1)}%`, percentage: props.node.cpu ?? 0, status: cpuStatus.value, detail: `负载 ${(props.node.load ?? 0).toFixed(2)} / ${(props.node.load5 ?? 0).toFixed(2)} / ${(props.node.load15 ?? 0).toFixed(2)}` },
+  { label: '内存', value: `${memPercentage.value.toFixed(1)}%`, percentage: memPercentage.value, status: memStatus.value, detail: `${formatBytes(props.node.ram ?? 0)} / ${formatBytes(props.node.mem_total ?? 0)}` },
+  { label: '硬盘', value: `${diskPercentage.value.toFixed(1)}%`, percentage: diskPercentage.value, status: diskStatus.value, detail: `${formatBytes(props.node.disk ?? 0)} / ${formatBytes(props.node.disk_total ?? 0)}` },
+  { label: '流量', value: props.node.traffic_limit > 0 ? `${trafficUsedPercentage.value.toFixed(1)}%` : '不限量', percentage: trafficUsedPercentage.value, status: getStatus(trafficUsedPercentage.value), detail: `${formatBytes(trafficUsed.value)} / ${props.node.traffic_limit > 0 ? formatBytes(props.node.traffic_limit) : '∞'}` },
+])
+const network = computed(() => [
+  { label: '上行', icon: 'tabler:arrow-up-right', speed: props.node.net_out ?? 0, total: props.node.net_total_up ?? 0 },
+  { label: '下行', icon: 'tabler:arrow-down-left', speed: props.node.net_in ?? 0, total: props.node.net_total_down ?? 0 },
+])
 </script>
 
 <template>
   <CardX
-    hoverable
     role="link" tabindex="0" :aria-label="`查看 ${props.node.name} 详情`"
-    class="node-card focus-visible:outline-2 focus-visible:outline-emerald-500 w-full cursor-pointer backdrop-blur-xl backdrop-saturate-150 bg-background/40 border-none shadow-[0_0_0_3px] shadow-transparent hover:bg-background/60 hover:shadow-slate-500/10 transition-all duration-200 rounded-lg ring-1 ring-foreground/[0.06] glass-hover-blur"
-    :class="[!props.node.online && '!shadow-red-600/20']"
-    :header-class="`max-md:px-3 max-md:py-2.5 ${isCompact ? 'md:px-3 md:py-2' : ''}`"
-    :content-class="`max-md:p-3 max-md:pt-0 ${isCompact ? 'md:p-3 md:pt-0' : ''}`"
-    @keydown="openWithKeyboard"
-    @click="emit('click')"
+    class="node-card h-full w-full cursor-pointer rounded-xl border border-border bg-card transition-colors hover:border-primary/40 focus-visible:outline-2 focus-visible:outline-primary"
+    :header-class="isCompact ? '!px-3 !pt-3 !pb-2' : '!px-4 !pt-4 !pb-3'"
+    :content-class="isCompact ? '!p-3 !pt-0' : '!p-4 !pt-0'"
+    @keydown="openWithKeyboard" @click="emit('click')"
   >
     <template #header>
-      <div class="flex gap-2 min-w-0 items-center">
-        <DataTooltip
-          placement="right"
-          :content="`${formatUptime(props.node.uptime ?? 0)} · 最后上报：${offlineTime}`"
-          class="size-2 rounded-full" :class="[props.node.online ? 'bg-green-600' : 'bg-red-600']"
-          content-class="whitespace-nowrap"
-        >
-          <div
-            class="animate-ping absolute inset-0 rounded-full opacity-50"
-            :class="[props.node.online ? 'bg-green-600' : 'bg-red-600']"
-          />
-        </DataTooltip>
-        <span class="text-md font-bold flex-1 min-w-0 truncate">{{ props.node.name }}</span>
+      <div class="flex min-w-0 items-center gap-2.5">
+        <img v-if="hasRegion(props.node.region)" :src="`/images/flags/${getRegionCode(props.node.region)}.svg`" :alt="getRegionDisplayName(props.node.region)" class="size-5 shrink-0">
+        <span class="min-w-0 truncate text-sm font-semibold" :title="props.node.name">{{ props.node.name }}</span>
       </div>
     </template>
-
     <template #header-extra>
-      <div class="flex gap-2 items-center">
-        <button
-          type="button" :aria-label="isPinned ? '取消置顶' : '置顶'"
-          class="flex items-center transition-colors"
-          :class="isPinned ? 'text-amber-400' : 'text-muted-foreground/40 hover:text-amber-400'"
-          @click.stop="appStore.togglePinnedNode(props.node.uuid)"
-        >
-          <Icon :icon="isPinned ? 'tabler:star-filled' : 'tabler:star'" width="14" height="14" />
+      <button
+        type="button" :aria-label="isPinned ? '取消置顶' : '置顶'"
+        class="rounded p-1 transition-colors focus-visible:outline-2 focus-visible:outline-primary"
+        :class="isPinned ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground hover:text-primary'"
+        @click.stop="appStore.togglePinnedNode(props.node.uuid)"
+      >
+        <Icon :icon="isPinned ? 'tabler:star-filled' : 'tabler:star'" width="15" height="15" />
+      </button>
+    </template>
+    <div class="flex flex-col" :class="isCompact ? 'gap-3' : 'gap-4'">
+      <div class="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+        <span class="flex min-w-0 items-center gap-1.5 truncate">
+          <img :src="getOSImage(props.node.os)" :alt="getOSName(props.node.os)" class="size-3.5">
+          {{ getOSName(props.node.os) }} · {{ props.node.cpu_cores }} 核
+        </span>
+        <span class="inline-flex shrink-0 items-center gap-1.5" :class="props.node.online ? 'text-primary' : 'text-destructive'" :title="`最后上报：${offlineTime}`">
+          <span class="size-1.5 rounded-full bg-current" />{{ props.node.online ? '在线' : '离线' }}
+        </span>
+      </div>
+      <div v-if="props.node.online" class="grid grid-cols-2 gap-x-5" :class="isCompact ? 'gap-y-3' : 'gap-y-4'">
+        <div v-for="metric in metrics" :key="metric.label" class="flex min-w-0 flex-col gap-1.5">
+          <div class="flex items-baseline justify-between gap-1">
+            <span class="text-xs text-muted-foreground">{{ metric.label }}</span>
+            <span class="text-sm font-semibold">{{ metric.value }}</span>
+          </div>
+          <ProgressThin :percentage="metric.percentage" :status="metric.status" :height="4" />
+          <div class="truncate text-[11px] text-muted-foreground" :title="metric.detail">
+            {{ metric.detail }}
+          </div>
+        </div>
+      </div>
+      <div v-else class="flex min-h-32 flex-col justify-center gap-2 rounded-lg bg-muted/50 px-3 text-center">
+        <span class="text-sm font-medium">节点离线{{ offlineRelative !== '-' ? ` · ${offlineRelative}` : '' }}</span>
+        <span class="text-xs text-muted-foreground">最后上报 {{ offlineTime }}</span>
+        <span class="text-xs text-muted-foreground">点击查看配置与历史数据</span>
+      </div>
+      <div v-if="props.node.online" class="grid grid-cols-2 gap-3 border-t border-border pt-3">
+        <div v-for="direction in network" :key="direction.label" class="min-w-0">
+          <div class="mb-1 flex items-center gap-1 text-[11px] text-muted-foreground">
+            <Icon :icon="direction.icon" width="12" />{{ direction.label }}
+          </div>
+          <div class="truncate text-sm font-medium">
+            {{ formatBytesPerSecond(direction.speed) }}
+          </div>
+          <div class="mt-0.5 text-[11px] text-muted-foreground">
+            累计 {{ formatBytes(direction.total) }}
+          </div>
+        </div>
+      </div>
+      <CarrierLatency :uuid="props.node.uuid" :online="props.node.online" />
+      <div v-if="props.node.online && (appStore.showNodeConnections || appStore.showNodeUptime)" class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+        <span v-if="appStore.showNodeUptime" class="flex items-center gap-1" title="系统运行时间">
+          <Icon icon="tabler:clock-hour-4" width="12" />{{ formatUptime(props.node.uptime ?? 0) }}
+        </span>
+        <span v-if="appStore.showNodeConnections" title="当前连接数">TCP {{ (props.node.connections ?? 0).toLocaleString() }} · UDP {{ (props.node.connections_udp ?? 0).toLocaleString() }}</span>
+      </div>
+      <div v-if="priceTags.length || customTags.length" class="flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-border pt-3 text-[11px] text-muted-foreground">
+        <span v-for="(tag, index) in priceTags" :key="index" :class="tag.tone === 'danger' ? 'text-destructive font-medium' : tag.tone === 'warn' ? 'text-amber-700 dark:text-amber-400' : ''">{{ tag.text }}</span>
+        <button v-for="tag in customTags" :key="tag" type="button" class="rounded bg-muted px-1.5 py-0.5 hover:text-primary focus-visible:outline-2" :title="`筛选标签：${tag}`" @click.stop="filterByTag(tag)">
+          {{ tag }}
         </button>
-        <img :src="getOSImage(props.node.os)" :alt="getOSName(props.node.os)" class="size-4">
-        <img
-          v-if="hasRegion(props.node.region)" :src="`/images/flags/${getRegionCode(props.node.region)}.svg`"
-          :alt="getRegionDisplayName(props.node.region)" class="size-5 shrink-0"
-        >
       </div>
-    </template>
-
-    <template #default>
-      <div class="flex flex-col gap-3 max-md:gap-2" :class="isCompact && 'md:gap-2'">
-        <div class="gap-3 max-md:gap-x-3 max-md:gap-y-2 grid grid-cols-2" :class="isCompact && 'md:gap-x-3 md:gap-y-2'">
-          <!-- <div class="flex flex-col gap-1 col-span-2">
-                <div class="flex gap-2 items-center">
-                  <img :src="getOSImage(props.node.os)" :alt="getOSName(props.node.os)" class="size-4">
-                  <span class="text-xs">{{ getOSName(props.node.os) }}</span>
-                </div>
-              </div> -->
-          <!-- CPU -->
-          <div class="flex flex-col gap-1">
-            <div class="w-full text-xs flex flex-row justify-between">
-              <span class="text-muted-foreground">
-                CPU
-              </span>
-              <span>{{ (props.node.cpu ?? 0).toFixed(1) }}%</span>
-            </div>
-            <ProgressThin :percentage="props.node.cpu ?? 0" :status="cpuStatus" :height="4" />
-            <div class="text-[11px] text-muted-foreground truncate">
-              {{ props.node.load.toFixed(2) ?? 0 }}, {{ props.node.load5.toFixed(2) ?? 0 }}, {{
-                props.node.load15.toFixed(2) ?? 0 }} ({{ props.node.cpu_cores }}c)
-            </div>
-          </div>
-
-          <!-- 内存 -->
-          <div class="flex flex-col gap-1">
-            <div class="w-full text-xs flex flex-row justify-between">
-              <span class="text-muted-foreground">
-                内存
-              </span>
-              <span>{{ memPercentage.toFixed(1) }}%</span>
-            </div>
-            <ProgressThin :percentage="memPercentage" :status="memStatus" :height="4" />
-            <div class="text-[11px] text-muted-foreground truncate">
-              {{ formatBytes(props.node.ram ?? 0) }} / {{ formatBytes(props.node.mem_total ?? 0) }}
-            </div>
-          </div>
-
-          <!-- 硬盘 -->
-          <div class="flex flex-col gap-1">
-            <div class="w-full text-xs flex flex-row justify-between">
-              <span class="text-muted-foreground">
-                硬盘
-              </span>
-              <span>{{ diskPercentage.toFixed(1) }}%</span>
-            </div>
-            <ProgressThin :percentage="diskPercentage" :status="diskStatus" :height="4" />
-            <div class="text-[11px] text-muted-foreground truncate">
-              {{ formatBytes(props.node.disk ?? 0) }} / {{ formatBytes(props.node.disk_total ?? 0) }}
-            </div>
-          </div>
-
-          <!-- 流量进度条 -->
-          <div class="flex flex-col gap-1">
-            <div class="w-full text-xs flex flex-row justify-between">
-              <span class="text-muted-foreground">
-                流量
-              </span>
-              <span>{{ trafficUsedPercentage.toFixed(1) }}%</span>
-            </div>
-            <ProgressThin :percentage="trafficUsedPercentage" status="success" :height="4" />
-            <div class="text-[11px] text-muted-foreground truncate">
-              {{ formatBytes(trafficUsed) }} /
-              <template v-if="showTrafficProgress(node)">
-                {{ formatBytes(props.node.traffic_limit) }}
-              </template>
-              <template v-else>
-                ∞
-              </template>
-            </div>
-          </div>
-        </div>
-        <div class="gap-1.5 grid grid-cols-6 relative">
-          <div
-            v-if="!props.node.online"
-            class="absolute inset-0 flex flex-col gap-1 items-center justify-center z-1 text-center" aria-hidden="true"
-          >
-            <div class="text-sm font-medium text-destructive">
-              离线{{ offlineRelative !== '-' ? ` ${offlineRelative}` : '' }}
-            </div>
-            <div class="text-xs text-muted-foreground">
-              {{ offlineTime }}
-            </div>
-          </div>
-          <div
-            class="flex flex-col gap-0.5 p-1 pl-2 rounded-sm bg-slate-500/5 col-span-2"
-            :class="[!props.node.online ? 'blur-xs opacity-60' : '']"
-          >
-            <div class="text-[11px] flex flex-col">
-              <div class="text-green-600 flex flex-row items-center gap-1">
-                <Icon icon="tabler:chevron-up" width="12" height="12" />
-                {{ formatBytesPerSecond(props.node.net_out ?? 0) }}
-              </div>
-              <div class="text-blue-600 flex flex-row items-center gap-1">
-                <Icon icon="tabler:chevron-down" width="12" height="12" />
-                {{ formatBytesPerSecond(props.node.net_in ?? 0) }}
-              </div>
-            </div>
-          </div>
-          <div
-            class="flex flex-col gap-0.5 p-1 pl-2 rounded-sm bg-slate-500/5"
-            :class="[appStore.showNodeConnections ? 'col-span-2' : 'col-span-4', !props.node.online ? 'blur-xs opacity-60' : '']"
-          >
-            <div class="text-[11px] text-muted-foreground flex flex-col">
-              <div class="flex flex-row items-center gap-1">
-                <Icon icon="tabler:upload" width="12" height="12" />
-                {{ formatBytes(props.node.net_total_up ?? 0) }}
-              </div>
-              <div class="flex flex-row items-center gap-1">
-                <Icon icon="tabler:download" width="12" height="12" />
-                {{ formatBytes(props.node.net_total_down ?? 0) }}
-              </div>
-            </div>
-          </div>
-          <div
-            v-if="appStore.showNodeConnections"
-            class="flex flex-col gap-0.5 p-1 pl-2 rounded-sm bg-slate-500/5 col-span-2"
-            :class="[!props.node.online ? 'blur-xs opacity-60' : '']"
-          >
-            <div class="text-[11px] text-muted-foreground flex flex-col">
-              <div class="flex flex-row items-center gap-1">
-                <span class="text-[10px] font-medium text-muted-foreground/70">TCP</span>
-                {{ (props.node.connections ?? 0).toLocaleString() }}
-              </div>
-              <div class="flex flex-row items-center gap-1">
-                <span class="text-[10px] font-medium text-muted-foreground/70">UDP</span>
-                {{ (props.node.connections_udp ?? 0).toLocaleString() }}
-              </div>
-            </div>
-          </div>
-          <div
-            v-if="priceTags.length" class="col-span-6 flex flex-row gap-0.5 p-1 pl-2 rounded-sm bg-slate-500/5 justify-center"
-            :class="[!props.node.online ? 'blur-xs opacity-60' : '', appStore.showNodeUptime ? 'max-md:col-span-3' : '']"
-          >
-            <div class="text-[11px] text-muted-foreground flex flex-row gap-3 max-md:gap-1.5 max-md:flex-wrap max-md:justify-center overflow-hidden">
-              <span
-                v-for="(tag, index) in priceTags" :key="index" class="whitespace-nowrap"
-                :class="tag.tone === 'danger' ? 'text-red-500 font-medium' : tag.tone === 'warn' ? 'text-amber-500' : ''"
-              >
-                {{ tag.text }}
-              </span>
-            </div>
-          </div>
-          <!-- 在线时长（移动端与价格并排一行，省一行高度） -->
-          <div
-            v-if="appStore.showNodeUptime"
-            class="col-span-6 flex flex-row gap-2 items-center p-1 rounded-sm bg-slate-500/5 justify-center text-[11px] text-muted-foreground"
-            :class="[!props.node.online ? 'blur-xs opacity-60' : '', priceTags.length ? 'max-md:col-span-3' : '']"
-          >
-            <Icon icon="tabler:clock-hour-4" width="12" height="12" />
-            <span>{{ formatUptime(props.node.uptime ?? 0) }}</span>
-          </div>
-          <div class="col-span-6 min-w-0">
-            <CarrierLatency :uuid="props.node.uuid" :online="props.node.online" />
-          </div>
-        </div>
-        <div v-if="customTags.length > 0" class="flex shrink-0 flex-wrap gap-1 items-center">
-          <Badge
-            v-for="(tag, index) in customTags" :key="index" variant="outline"
-            class="!text-[11px] rounded text-muted-foreground border-muted-foreground/10 px-1.5 cursor-pointer transition-colors hover:text-foreground hover:border-muted-foreground/30"
-            :title="`筛选标签：${tag}`"
-            @click.stop="filterByTag(tag)"
-          >
-            {{ tag }}
-          </Badge>
-        </div>
-      </div>
-    </template>
+    </div>
   </CardX>
 </template>
-
-<style scoped>
-.node-card {
-  position: relative;
-  overflow: hidden;
-}
-
-.node-offline-overlay {
-  position: absolute;
-  inset: 0;
-  z-index: 2;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 24px;
-  pointer-events: none;
-  border-radius: inherit;
-  background-color: var(--card);
-  transition: opacity 200ms ease;
-}
-
-.node-card:hover .node-offline-overlay {
-  opacity: 0;
-}
-
-.node-offline-overlay__content {
-  display: flex;
-  max-width: 100%;
-  flex-direction: column;
-  gap: 6px;
-  align-items: center;
-}
-
-.node-offline-overlay__header,
-.node-offline-overlay__tags {
-  max-width: 100%;
-}
-</style>

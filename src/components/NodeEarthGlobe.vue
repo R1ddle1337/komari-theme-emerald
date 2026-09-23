@@ -14,7 +14,7 @@ import { useAppStore } from '@/stores/app'
 import { useNodesStore } from '@/stores/nodes'
 import { getCoordByCode, getCountryCodeFromRegion } from '@/utils/geoHelper'
 import { formatBytesPerSecondSplit } from '@/utils/helper'
-import { perfTier } from '@/utils/perfTier'
+import { initPerfTier, perfTier } from '@/utils/perfTier'
 
 const props = defineProps<{
   nodes?: NodeData[]
@@ -456,6 +456,7 @@ function startGlobe() {
 }
 
 onMounted(() => {
+  void initPerfTier()
   startGlobe()
 })
 
@@ -580,7 +581,7 @@ function formatRate(bytesPerSec: number): string {
 </script>
 
 <template>
-  <div ref="containerRef" class="relative aspect-square w-full max-w-md mx-auto -translate-y-6 md:-translate-y-12">
+  <div ref="containerRef" class="relative aspect-square w-full max-w-md mx-auto">
     <div class="earth-globe-halo absolute inset-0 pointer-events-none" aria-hidden="true" />
     <canvas
       ref="canvasRef"
@@ -591,7 +592,7 @@ function formatRate(bytesPerSec: number): string {
     <template v-for="cluster in regionClusters" :key="cluster.code">
       <Teleport :to="getAnchorEl(cluster.code) ?? containerRef!" :disabled="!getAnchorEl(cluster.code)">
         <div
-          class="absolute -top-7.5 left-0 transition-[opacity,filter] duration-500 rounded-lg backdrop-blur-xl backdrop-saturate-150"
+          class="absolute -top-7.5 left-0 transition-[opacity,filter] duration-500 rounded-lg"
           :style="{
             opacity: `var(--cobe-visible-${markerId(cluster.code)}, 0)`,
             filter: `blur(calc((1 - var(--cobe-visible-${markerId(cluster.code)}, 0)) * 20px))`,
@@ -602,7 +603,7 @@ function formatRate(bytesPerSec: number): string {
             class="size-4 block absolute -bottom-2 -left-2 z-1"
           >
           <div
-            class="relative z-2 bg-background/40 rounded-lg py-0.5 px-1.5 text-xs zoom-80 items-start justify-center text-nowrap ring-1 ring-foreground/[0.06] shadow-sm"
+            class="relative z-2 bg-card rounded-lg py-0.5 px-1.5 text-xs zoom-80 items-start justify-center text-nowrap border border-border shadow-sm"
           >
             <div class="text-green-600 flex flex-row items-center gap-0.5">
               <Icon icon="tabler:chevron-up" width="12" height="12" /> {{ formatRate(rateFor(cluster.code).up) }}
@@ -617,7 +618,7 @@ function formatRate(bytesPerSec: number): string {
 
     <div
       v-if="totalServers > 0"
-      class="absolute top-6 md:top-12 left-0 text-[10px] text-muted-foreground pointer-events-none flex gap-2 items-center backdrop-blur-xl backdrop-saturate-150 bg-background/40 rounded-lg px-2.5 py-1 ring-1 ring-foreground/[0.06] shadow-sm"
+      class="absolute top-6 md:top-12 left-0 text-[10px] text-muted-foreground pointer-events-none flex gap-2 items-center bg-card rounded-lg px-2.5 py-1 border border-border shadow-sm"
     >
       <div v-if="onlineServers > 0" class="flex items-center gap-1">
         <span class="inline-block size-1.5 rounded-full bg-green-600 animate-pulse" />

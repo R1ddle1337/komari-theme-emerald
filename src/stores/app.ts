@@ -5,7 +5,6 @@ import { defineStore } from 'pinia'
 import { computed, ref, watch } from 'vue'
 
 export type ThemeMode = 'auto' | 'light' | 'dark'
-export type ShaderType = 'bubbles' | 'liquid' | 'none'
 type Lang = 'zh-CN' | 'en-US'
 type NodeViewMode = 'card' | 'list'
 type RpcTransportMode = 'websocket' | 'http'
@@ -31,12 +30,6 @@ const useAppStore = defineStore('app', () => {
   const lang = ref<Lang>('zh-CN')
   const publicSettings = ref<PublicSettings>()
   const nodeSelectedGroup = useStorageAsync<string>('nodeSelectedGroup', 'all', localStorage)
-  const shaderType = ref<ShaderType>((localStorage.getItem('shaderType') as ShaderType) || 'bubbles')
-
-  // 同步持久化 shaderType
-  watch(shaderType, (val) => {
-    localStorage.setItem('shaderType', val)
-  })
   const isLoggedIn = ref<boolean>(false)
   const connectionError = ref<boolean>(false)
 
@@ -233,21 +226,6 @@ const useAppStore = defineStore('app', () => {
     return false
   })
 
-  const enableGlassEffect = computed<boolean>(() => {
-    const settings = publicSettings.value?.theme_settings
-    if (!settings || settings.enableGlassEffect === undefined || settings.enableGlassEffect === null) {
-      return true
-    }
-    const val = settings.enableGlassEffect
-    if (typeof val === 'boolean')
-      return val
-    if (val === 'true' || val === '1')
-      return true
-    if (val === 'false' || val === '0')
-      return false
-    return true
-  })
-
   // 计算属性：ICP 备案配置
   const icpEnabled = computed<boolean>(() => {
     const settings = publicSettings.value?.theme_settings
@@ -436,7 +414,6 @@ const useAppStore = defineStore('app', () => {
     visitorInfoCardEnabled,
     hideAdminEntryWhenLoggedOut,
     disablePageAnimation,
-    enableGlassEffect,
     icpEnabled,
     icpNumber,
     icpUrl,
@@ -450,7 +427,6 @@ const useAppStore = defineStore('app', () => {
     currentBackgroundUrl,
     backgroundBlur,
     backgroundOverlay,
-    shaderType,
     isLoggedIn,
     publicSettings,
     connectionError,

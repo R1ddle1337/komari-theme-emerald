@@ -2,7 +2,7 @@
   "name": "Komari Emerald",
   "short": "Emerald",
   "description": "An emerald theme for Komari",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "author": "Riddle & Tokinx",
   "url": "https://github.com/R1ddle1337/komari-theme-emerald",
   "preview": "preview.png",
@@ -135,13 +135,6 @@
         "type": "switch",
         "default": false,
         "help": "减少页面过渡动画效果，提升访问速度和响应性"
-      },
-      {
-        "key": "enableGlassEffect",
-        "name": "毛玻璃特效",
-        "type": "switch",
-        "default": true,
-        "help": "开启全局 iOS 风格毛玻璃效果，关闭可提升低端设备性能"
       },
       {
         "name": "备案设置",
