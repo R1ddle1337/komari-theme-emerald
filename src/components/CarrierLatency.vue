@@ -75,11 +75,11 @@ function tone(reading: CarrierReading) {
               <CarrierSparkline :points="carrier.trend" :ceiling="ceiling" :name="carrier.name" :class="compact ? '!h-4' : ''" />
               <span v-if="carrier.trend.every(p => p.latency === null && p.loss === null)" class="absolute inset-0 flex items-center justify-center text-[9px] text-muted-foreground">暂无趋势</span>
             </span>
-            <span v-if="!compact" class="text-[10px] text-muted-foreground tabular-nums">{{ lossLabel(carrier) }}</span>
+            <span v-if="!compact" class="text-[10px] text-muted-foreground tabular-nums" title="近 5 分钟已收到的探测结果中的丢包率；未收到样本的时段不计入丢包率。">{{ lossLabel(carrier) }}</span>
           </span>
         </span>
         <span v-if="!compact" class="mt-2 flex justify-between gap-1 text-[9px] text-muted-foreground">
-          <template v-if="graphReady"><span>30 分钟趋势 · 0–{{ ceiling }} ms</span><span>数值为近 5 分钟均值</span></template>
+          <template v-if="graphReady"><span>30 分钟趋势 · 0–{{ ceiling }} ms</span><span>均值 / 丢包：近 5 分钟</span></template>
           <span v-else-if="online && ping.enabled">{{ ping.historyError ? '趋势更新失败，稍后重试' : ping.loading ? '正在加载趋势…' : '' }}</span>
         </span>
       </button>
@@ -133,7 +133,7 @@ function tone(reading: CarrierReading) {
           </tbody>
         </table>
         <p class="mt-2 text-[10px] leading-relaxed text-muted-foreground">
-          数值为近 5 分钟成功探测均值；曲线展示近 30 分钟趋势，每分钟刷新。三网共用刻度，红条表示丢包，空白表示缺测，不用 0 延迟代替。
+          延迟均值和丢包率统计近 5 分钟，曲线展示近 30 分钟，每分钟刷新。延迟仅计成功探测；丢包率仅计已收到的探测结果。三网共用刻度，红条表示丢包，未收到样本的时段留空，0% 丢包也可能有缺测。
         </p>
       </PopoverContent>
     </PopoverPortal>

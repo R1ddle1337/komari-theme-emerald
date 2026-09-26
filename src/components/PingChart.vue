@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { PingChartRecord, PingMetricSeries } from '@/utils/pingChart'
 import { Icon } from '@iconify/vue'
 import dayjs from 'dayjs'
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
@@ -10,7 +11,7 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { useAppStore } from '@/stores/app'
 import { escapeChartText, metricSourceLabel } from '@/utils/metricPresentation'
-import { cutPeakValues } from '@/utils/recordHelper'
+import { buildPingChartData, normalizePingMetricSeries, selectPingTaskStats } from '@/utils/pingChart'
 import { getSharedRpc } from '@/utils/rpc'
 import '@/utils/echarts' // 共享 ECharts 配置
 
@@ -103,17 +104,11 @@ watch(availableViews, (views) => {
 
 // ==================== 类型定义 ====================
 
-interface PingRecord {
-  client: string
-  task_id: number
-  time: string
-  value: number | null
-}
-
 interface TaskInfo {
   id: number
   name: string
   interval: number
+  metricInterval?: number
   loss: number
   p99?: number
   p50?: number
@@ -126,24 +121,12 @@ interface TaskInfo {
   type?: string
 }
 
-interface MetricPoint {
-  time: string
-  value: number | null
-}
-
-interface MetricSeries {
-  downsampled?: boolean
-  interval_seconds?: number
-  metric_key: 'ping.latency_ms' | 'ping.loss'
-  tags?: Record<string, string>
-  points: MetricPoint[]
-}
-
 interface MetricQueryResponse {
-  series: MetricSeries[]
+  series: PingMetricSeries[]
 }
 
 interface PingMetricTaskStats {
+  entity_id: string
   task_id: string
   name?: string
   type?: string
@@ -164,12 +147,11 @@ interface PingMetricStatsResponse {
 }
 
 // 数据状态
-const remoteData = shallowRef<PingRecord[]>([])
+const remoteData = shallowRef<PingChartRecord[]>([])
 const tasks = shallowRef<TaskInfo[]>([])
 const loading = ref(false)
 const error = ref<string | null>(null)
 const sourceLabel = ref('')
-const metricInterval = ref(0)
 let fetchRequestId = 0
 let activeRequest: AbortController | null = null
 
@@ -184,18 +166,6 @@ const smoothInfoTooltipOpen = ref(false)
 
 const chartMargin = { top: 30, right: 24, bottom: 52, left: 56 }
 let coarsePointerMediaQuery: MediaQueryList | null = null
-
-const mergeToleranceMs = computed(() => {
-  const taskIntervals = tasks.value
-    .map(t => t.interval)
-    .filter((v): v is number => typeof v === 'number' && v > 0)
-
-  const fallbackIntervalSec = taskIntervals.length ? Math.min(...taskIntervals) : 60
-  return Math.min(
-    6000,
-    Math.max(800, Math.floor(fallbackIntervalSec * 1000 * 0.25)),
-  )
-})
 
 function syncTouchTooltipMode() {
   if (typeof window === 'undefined') {
@@ -257,7 +227,7 @@ async function fetchRecords() {
         aggregation: 'avg',
       }, { signal: controller.signal }),
       rpc.getClient().call<PingMetricStatsResponse>('public:getPingMetricStats', {
-        uuid,
+        entity_id: uuid,
         hours,
       }, { signal: controller.signal }),
     ])
@@ -266,37 +236,21 @@ async function fetchRecords() {
       return
 
     sourceLabel.value = metricSourceLabel(metricResult?.series ?? [])
-    metricInterval.value = Math.max(0, ...(metricResult?.series ?? []).map(s => s.interval_seconds || 0))
-    const records: PingRecord[] = []
+    const metricIntervals = new Map<number, number>()
     for (const series of metricResult?.series ?? []) {
       const taskId = Number(series.tags?.task_id)
-      if (!Number.isInteger(taskId))
+      if (series.entity_id !== uuid || !Number.isInteger(taskId))
         continue
 
-      for (const point of series.points ?? []) {
-        if (point.value === null && series.metric_key === 'ping.loss')
-          continue
-
-        // A rollup can contain partial loss (0..1). It must not overwrite the
-        // successful latency sample from the same bucket with a full outage.
-        if (series.metric_key === 'ping.loss' && (point.value === null || point.value < 1))
-          continue
-
-        records.push({
-          client: uuid,
-          task_id: taskId,
-          time: point.time,
-          value: series.metric_key === 'ping.loss' ? -1 : point.value,
-        })
-      }
+      metricIntervals.set(taskId, Math.max(metricIntervals.get(taskId) ?? 0, series.interval_seconds || 0))
     }
-    records.sort((a, b) => dayjs(a.time).valueOf() - dayjs(b.time).valueOf())
 
-    remoteData.value = records
-    tasks.value = (statsResult?.stats ?? []).map(task => ({
+    remoteData.value = normalizePingMetricSeries(metricResult?.series ?? [], uuid)
+    tasks.value = selectPingTaskStats(statsResult?.stats ?? [], uuid).map(task => ({
       id: Number(task.task_id),
       name: task.name || `Ping ${task.task_id}`,
       interval: task.interval ?? 60,
+      metricInterval: metricIntervals.get(Number(task.task_id)),
       loss: task.loss,
       p99: task.p99,
       p50: task.p50,
@@ -307,7 +261,7 @@ async function fetchRecords() {
       latest: task.latest,
       total: task.total,
       type: task.type,
-    })).filter(task => Number.isInteger(task.id))
+    }))
 
     if (tasks.value.length > 0 && selectedTaskIds.value.length === 0) {
       selectedTaskIds.value = tasks.value.map(t => t.id)
@@ -330,89 +284,11 @@ async function fetchRecords() {
 
 // ==================== 数据处理 ====================
 
-const mergedData = computed(() => {
-  const data = remoteData.value
-  if (!data.length)
-    return []
-
-  const toleranceMs = mergeToleranceMs.value
-
-  const grouped: Map<number, Record<string, unknown>> = new Map()
-  const anchors: number[] = []
-
-  for (const rec of data) {
-    const ts = dayjs(rec.time).valueOf()
-    let anchor: number | null = null
-
-    for (const a of anchors) {
-      if (Math.abs(a - ts) <= toleranceMs) {
-        anchor = a
-        break
-      }
-    }
-
-    const useTs = anchor ?? ts
-    if (!grouped.has(useTs)) {
-      grouped.set(useTs, { time: dayjs(useTs).toISOString() })
-      if (anchor === null) {
-        anchors.push(useTs)
-      }
-    }
-
-    const group = grouped.get(useTs)!
-    group[rec.task_id] = rec.value === null || rec.value < 0 ? null : rec.value
-  }
-
-  const merged = Array.from(grouped.values()).sort(
-    (a, b) => dayjs(a.time as string).valueOf() - dayjs(b.time as string).valueOf(),
-  )
-
-  const hours = selectedHours.value
-  const lastItem = merged.at(-1)
-  const lastTs = lastItem ? dayjs(lastItem.time as string).valueOf() : dayjs().valueOf()
-  const fromTs = lastTs - hours * 3600_000
-
-  let startIdx = 0
-  for (let i = 0; i < merged.length; i++) {
-    const item = merged[i]
-    if (!item)
-      continue
-    const ts = dayjs(item.time as string).valueOf()
-    if (ts >= fromTs) {
-      startIdx = Math.max(0, i - 1)
-      break
-    }
-  }
-
-  const windowed = merged.slice(startIdx)
-  const expected = Math.max(metricInterval.value, Math.min(...tasks.value.map(task => task.interval).filter(interval => interval > 0)), 1)
-  const withGaps: Record<string, unknown>[] = []
-  for (const row of windowed) {
-    const previous = withGaps.at(-1)
-    if (previous && dayjs(row.time as string).valueOf() - dayjs(previous.time as string).valueOf() > expected * 3000)
-      withGaps.push({ time: dayjs(previous.time as string).add(expected, 'second').toISOString() })
-    withGaps.push(row)
-  }
-  return withGaps
-})
-
-const chartData = computed(() => {
-  let data = mergedData.value
-  const selectedKeys = selectedTaskIds.value.map(String)
-
-  if (selectedKeys.length === 0)
-    return []
-
-  if (cutPeak.value) {
-    data = cutPeakValues(data, selectedKeys)
-  }
-
-  return data
-})
+const chartData = computed(() => buildPingChartData(remoteData.value, tasks.value, cutPeak.value))
 
 // ==================== 工具函数 ====================
 
-function formatTime(time: string, showDate: boolean): string {
+function formatTime(time: number, showDate: boolean): string {
   const date = dayjs(time)
   if (showDate) {
     return date.format('M/D HH:mm')
@@ -420,7 +296,7 @@ function formatTime(time: string, showDate: boolean): string {
   return date.format('HH:mm')
 }
 
-function formatTimeForTooltip(time: string, hours: number): string {
+function formatTimeForTooltip(time: number, hours: number): string {
   const date = dayjs(time)
   if (hours < 24) {
     return date.format('HH:mm:ss')
@@ -467,46 +343,6 @@ const latestValues = computed(() => {
 
 const selectedTasks = computed(() => {
   return tasks.value.filter(t => selectedTaskIds.value.includes(t.id))
-})
-
-const packetLossMarkers = computed(() => {
-  const data = mergedData.value
-  const markers = new Map<number, number[]>()
-
-  if (!data.length || !selectedTasks.value.length)
-    return markers
-
-  const chartTimes = data.map(item => dayjs(item.time as string).valueOf())
-  const toleranceMs = mergeToleranceMs.value
-
-  for (const task of selectedTasks.value) {
-    const points = new Set<number>()
-    const taskLossRecords = remoteData.value.filter(rec => rec.task_id === task.id && rec.value !== null && rec.value < 0)
-
-    for (const record of taskLossRecords) {
-      const lossTs = dayjs(record.time).valueOf()
-      let matchedIndex = -1
-
-      for (let i = 0; i < chartTimes.length; i++) {
-        const chartTs = chartTimes[i]
-        if (chartTs === undefined)
-          continue
-
-        if (Math.abs(chartTs - lossTs) <= toleranceMs) {
-          matchedIndex = i
-          break
-        }
-      }
-
-      if (matchedIndex >= 0) {
-        points.add(matchedIndex)
-      }
-    }
-
-    markers.set(task.id, Array.from(points).sort((a, b) => a - b))
-  }
-
-  return markers
 })
 
 // 切换任务选中状态
@@ -567,17 +403,19 @@ const pingChartOption = computed(() => {
   // 构建 series，确保颜色与卡片一致
   const series = taskList.map((task) => {
     const color = getTaskColor(task.id)
-    const lossMarkerIndexes = packetLossMarkers.value.get(task.id) || []
+    const taskData = data.get(task.id)
+    const lossTimes = taskData?.lossTimes ?? []
     return {
+      id: String(task.id),
       name: task.name,
       type: 'line' as const,
-      data: data.map(d => d[task.id] as number | null ?? null),
+      data: taskData?.points ?? [],
       smooth: showDelay.value && cutPeak.value ? 0.4 : 0,
       showSymbol: false,
       connectNulls: false,
       lineStyle: { width: showDelay.value ? 1.5 : 0, color, cap: 'round' as const },
       itemStyle: { color, opacity: showDelay.value ? 1 : 0 },
-      markLine: showLoss.value && lossMarkerIndexes.length
+      markLine: showLoss.value && lossTimes.length
         ? {
             silent: true,
             symbol: ['none', 'none'],
@@ -589,8 +427,8 @@ const pingChartOption = computed(() => {
               type: 'solid' as const,
               opacity: 0.55,
             },
-            data: lossMarkerIndexes.map(index => ({
-              xAxis: index,
+            data: lossTimes.map(time => ({
+              xAxis: time,
             })),
           }
         : undefined,
@@ -614,31 +452,26 @@ const pingChartOption = computed(() => {
     tooltip: {
       ...baseTooltipConfig.value,
       formatter: (params: unknown) => {
-        const p = params as Array<{ seriesName: string, value: number | null, dataIndex: number }>
+        const p = params as Array<{ seriesId: string, seriesName: string, value: [number, number | null], axisValue: number }>
         if (!p.length)
           return ''
         const firstParam = p[0]
         if (!firstParam)
           return ''
-        const rowData = data[firstParam.dataIndex]
-        if (!rowData)
-          return ''
-
-        const time = rowData.time as string
+        const time = firstParam.axisValue ?? firstParam.value[0]
         const timeStr = formatTimeForTooltip(time, hours)
         let html = `<div style="font-weight:600;margin-bottom:6px;color:${chartThemeColors.value.textSecondary}">${timeStr}</div>`
         html += '<div style="display:flex;flex-direction:column;gap:4px">'
 
         // 按延迟值排序显示
-        const sortedParams = [...p].sort((a, b) => (a.value ?? 0) - (b.value ?? 0))
+        const sortedParams = [...p].sort((a, b) => (a.value[1] ?? 0) - (b.value[1] ?? 0))
 
         for (const item of sortedParams) {
-          if (item.value !== null && item.value !== undefined) {
-            // 通过任务名找到对应的任务ID，再获取颜色
-            const task = tasks.value.find(t => t.name === item.seriesName)
-            const color = task ? colorMap.get(task.id) || chartColors[0] : chartColors[0]
+          const value = item.value[1]
+          if (value !== null && value !== undefined) {
+            const color = colorMap.get(Number(item.seriesId)) || chartColors[0]
             const colorDot = `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${color};margin-right:8px;flex-shrink:0"></span>`
-            html += `<div style="display:flex;align-items:center">${colorDot}<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeChartText(item.seriesName)}</span><span style="margin-left:auto;font-weight:600;margin-left:16px;font-variant-numeric:tabular-nums">${Math.round(item.value)} ms</span></div>`
+            html += `<div style="display:flex;align-items:center">${colorDot}<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeChartText(item.seriesName)}</span><span style="margin-left:auto;font-weight:600;margin-left:16px;font-variant-numeric:tabular-nums">${Math.round(value)} ms</span></div>`
           }
         }
         html += '</div>'
@@ -657,19 +490,18 @@ const pingChartOption = computed(() => {
     },
     grid: chartMargin,
     xAxis: {
-      type: 'category',
-      data: data.map(d => formatTime(d.time as string, showDateInAxis.value)),
+      type: 'time',
       axisLabel: {
         fontSize: 11,
         color: chartThemeColors.value.textSecondary,
         margin: 12,
+        formatter: (time: number) => formatTime(time, showDateInAxis.value),
       },
       axisLine: {
         show: true,
         lineStyle: { color: chartThemeColors.value.borderColor, width: 1 },
       },
       axisTick: { show: false },
-      boundaryGap: false,
     },
     yAxis: {
       type: 'value',
@@ -759,7 +591,7 @@ onBeforeUnmount(() => {
 
     <!-- 内容区域 -->
     <p v-if="sourceLabel" class="text-xs text-muted-foreground" role="status">
-      {{ sourceLabel }}
+      {{ sourceLabel }}；丢包率仅计已收到的探测结果
     </p>
     <Spinner :show="loading" content-class="flex flex-col gap-4">
       <div v-if="error" class="text-red-500 py-8 text-center">
